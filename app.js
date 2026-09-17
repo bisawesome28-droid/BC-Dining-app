@@ -79,7 +79,7 @@ function capitalize(s) {
 
 function renderRow(r) {
   const expanded = state.openRows.has(r.loc.id);
-  const barFill = r.st.kind === 'soon' ? '#ff9f0a' : '#34c759';
+  const barFill = r.st.kind === 'soon' ? '#edb36e' : '#34c759';
   const barW = Math.max(3, Math.min(100, r.live * 100)).toFixed(1) + '%';
   return `
     <button class="row-card${r.isOpen ? ' is-open' : ''}" data-action="open-row" data-id="${r.loc.id}">
@@ -107,7 +107,7 @@ function renderRowPeriods(r) {
   return `
     <div class="row-periods">
       ${r.periods.map((p) => `
-        <div class="row-period" style="background:${p.cur ? 'rgba(232,80,60,.18)' : 'transparent'}">
+        <div class="row-period" style="background:${p.cur ? 'rgba(235,51,68,.18)' : 'transparent'}">
           <span class="row-period-label" style="color:${p.cur ? '#f2f3f4' : 'rgba(242,243,244,.55)'}">${esc(p.l)}</span>
           <span class="row-period-range" style="color:${p.cur ? '#f2f3f4' : 'rgba(242,243,244,.55)'}">${esc(p.range)}</span>
         </div>
@@ -299,7 +299,7 @@ function renderDetail(id) {
       border: cur ? 'rgba(52,199,89,.35)' : 'var(--border)',
       ink: done ? 'rgba(242,243,244,.45)' : '#f2f3f4',
       subColor: cur ? '#5ddc80' : 'rgba(242,243,244,.62)',
-      dot: cur ? '#34c759' : done ? 'rgba(242,243,244,.28)' : 'rgba(232,80,60,.8)'
+      dot: cur ? '#34c759' : done ? 'rgba(242,243,244,.28)' : 'rgba(235,51,68,.8)'
     };
   });
 
@@ -355,7 +355,7 @@ function renderDetail(id) {
       <div class="posted-week-title">Posted week</div>
       <div class="posted-week">
         ${week.map((w) => `
-          <div class="posted-week-row" style="background:${w.isSel ? 'rgba(232,80,60,.12)' : 'transparent'};border-left-color:${w.isSel ? '#e8503c' : 'transparent'}">
+          <div class="posted-week-row" style="background:${w.isSel ? 'rgba(235,51,68,.12)' : 'transparent'};border-left-color:${w.isSel ? '#eb3344' : 'transparent'}">
             <span class="posted-week-day" style="color:${w.ink}">${w.day}</span>
             <span class="posted-week-meta">${esc(w.meta)}</span>
             <span class="posted-week-range" style="color:${w.ink}">${esc(w.range)}</span>
@@ -390,6 +390,13 @@ function renderTabBar() {
 // ---------- Root render ----------
 
 function render() {
+  // Only the search box should ever grab focus, and only if it already had it
+  // (e.g. the user is mid-keystroke) — never as a side effect of tapping something else.
+  const active = document.activeElement;
+  const restoreSearchFocus = !!(active && active.dataset && active.dataset.action === 'search');
+  const selStart = restoreSearchFocus ? active.selectionStart : null;
+  const selEnd = restoreSearchFocus ? active.selectionEnd : null;
+
   let body;
   if (state.detailId) {
     body = renderDetail(state.detailId);
@@ -402,6 +409,14 @@ function render() {
   }
   root.innerHTML = body;
   attachHandlers();
+
+  if (restoreSearchFocus) {
+    const input = root.querySelector('[data-action="search"]');
+    if (input) {
+      input.focus();
+      if (selStart !== null) input.setSelectionRange(selStart, selEnd);
+    }
+  }
 }
 
 function attachHandlers() {
@@ -409,10 +424,6 @@ function attachHandlers() {
     const action = el.dataset.action;
     if (action === 'search') {
       el.addEventListener('input', (e) => setState({ query: e.target.value }));
-      // keep focus/cursor position across re-render
-      const val = el.value;
-      el.focus();
-      el.setSelectionRange(val.length, val.length);
       return;
     }
     el.addEventListener('click', (e) => {

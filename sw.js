@@ -1,4 +1,4 @@
-const CACHE = 'bc-dining-v1';
+const CACHE = 'bc-dining-v4';
 const ASSETS = [
   './',
   './index.html',

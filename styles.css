@@ -7,14 +7,15 @@
   --card-open: #1b1e21;
   --border: rgba(255, 255, 255, 0.055);
   --border-open: rgba(255, 255, 255, 0.1);
-  --accent: #e8503c;
-  --accent-wash: rgba(232, 80, 60, 0.12);
+  --accent: #eb3344;
+  --accent-deep: #55020a;
+  --accent-wash: rgba(235, 51, 68, 0.12);
   --green: #34c759;
   --green-ink: #5ddc80;
   --green-wash: rgba(52, 199, 89, 0.16);
-  --amber: #ff9f0a;
-  --amber-ink: #ffb340;
-  --amber-wash: rgba(255, 159, 10, 0.16);
+  --amber: #edb36e;
+  --amber-ink: #f1ca9d;
+  --amber-wash: rgba(237, 179, 110, 0.16);
   --neutral-wash: rgba(255, 255, 255, 0.07);
 }
 
@@ -23,10 +24,16 @@
 html, body {
   margin: 0;
   height: 100%;
+  width: 100%;
+  overflow: hidden;
+  position: fixed;
+  inset: 0;
   background: var(--bg);
   color: var(--ink);
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+  touch-action: pan-y;
 }
 
 button, input {
@@ -144,9 +151,12 @@ button, input {
 
 .body-scroll {
   flex: 1;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
   padding: 0 20px;
   -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
 }
 
 .group-head {
@@ -436,8 +446,8 @@ button, input {
 
 .note-callout {
   margin-top: 10px;
-  background: rgba(232, 80, 60, 0.1);
-  border: 1px solid rgba(232, 80, 60, 0.28);
+  background: rgba(235, 51, 68, 0.1);
+  border: 1px solid rgba(235, 51, 68, 0.28);
   border-radius: 14px;
   padding: 12px 14px;
   font: 400 12.5px/1.5 -apple-system, system-ui, sans-serif;
