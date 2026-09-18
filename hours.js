@@ -19,10 +19,24 @@ export function fmtDuration(mins) {
   return m ? `${h}h ${m}m` : `${h}h`;
 }
 
+export function dateKey(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+// A dated override (a one-off schedule change for a specific calendar date) takes
+// priority over the recurring day-of-week schedule when present.
+export function periodsFor(loc, day, dateStr) {
+  const override = loc.overrides && loc.overrides[dateStr];
+  if (override) return override.periods;
+  return loc.days[day] || [];
+}
+
 // status.kind: 'open' | 'soon' (closes within an hour) | 'later' (opens later today) | 'sched' (future day) | 'closed'
-export function statusFor(loc, day, today, nowMins) {
-  const ps = loc.days[day] || [];
-  const isToday = day === today;
+export function statusFor(periods, isToday, nowMins) {
+  const ps = periods || [];
 
   if (!ps.length) {
     return { kind: 'closed', label: 'Closed', sub: isToday ? 'all day' : 'no service posted', cur: null };

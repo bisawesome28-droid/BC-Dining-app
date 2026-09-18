@@ -1,11 +1,18 @@
 import { LOCATIONS, DAY_NAMES, DAY_LETTERS, NOTES } from './data.js';
-import { fmtTime, fmtRange, fmtDuration, statusFor, rank, spanMinutes } from './hours.js';
+import { fmtTime, fmtRange, fmtDuration, statusFor, rank, spanMinutes, periodsFor, dateKey } from './hours.js';
 
 const root = document.getElementById('app');
 
 function nowParts() {
   const n = new Date();
   return { now: n.getHours() * 60 + n.getMinutes(), today: n.getDay(), date: n.getDate() };
+}
+
+// The day-strip always shows the current real calendar week, so a weekday index
+// (0=Sun..6=Sat) maps to one specific date — needed to resolve dated overrides.
+function dateKeyForDayIndex(i) {
+  const now = new Date();
+  return dateKey(new Date(now.getFullYear(), now.getMonth(), state.date - state.today + i));
 }
 
 const state = {
@@ -53,7 +60,7 @@ function esc(s) {
 
 // ---------- Row (list item) ----------
 
-function buildRows(list, day) {
+function buildRows(list, day, dateStr) {
   return list.map(({ loc, st }) => {
     const p = pillFor(st);
     const isOpen = st.kind === 'open' || st.kind === 'soon';
@@ -65,7 +72,7 @@ function buildRows(list, day) {
         : st.kind === 'sched'
           ? st.sub
           : 'No service today';
-    const periods = (loc.days[day] || []).map((pd) => {
+    const periods = periodsFor(loc, day, dateStr).map((pd) => {
       const cur = day === state.today && state.now >= pd.s && state.now < pd.e;
       return { l: pd.l, range: fmtRange(pd), cur };
     });
@@ -119,9 +126,9 @@ function renderRowPeriods(r) {
 
 // ---------- Today tab ----------
 
-function computeList(day) {
+function computeList(day, dateStr) {
   const q = state.query.trim().toLowerCase();
-  let list = LOCATIONS.map((loc) => ({ loc, st: statusFor(loc, day, state.today, state.now) }));
+  let list = LOCATIONS.map((loc) => ({ loc, st: statusFor(periodsFor(loc, day, dateStr), day === state.today, state.now) }));
   if (q) list = list.filter((x) => `${x.loc.name} ${x.loc.place}`.toLowerCase().includes(q));
   list = list.slice().sort((a, b) => rank(a.st) - rank(b.st));
   return list;
@@ -129,7 +136,8 @@ function computeList(day) {
 
 function renderToday() {
   const day = selectedDay();
-  const list = computeList(day);
+  const dateStr = dateKeyForDayIndex(day);
+  const list = computeList(day, dateStr);
   const openArr = list.filter((x) => x.st.kind === 'open');
   const soonArr = list.filter((x) => x.st.kind === 'soon');
   const closeNext = openArr.concat(soonArr).sort((a, b) => a.st.cur.e - b.st.cur.e)[0];
@@ -140,10 +148,12 @@ function renderToday() {
     ? (closeNext ? `${closeNext.loc.name} closes in ${fmtDuration(closeNext.st.cur.e - state.now)}` : 'Nothing serving right now')
     : `${list.filter((x) => x.st.kind !== 'closed').length} locations serving`;
 
+  const rec = list.filter((x) => x.loc.group === 'rec');
   const halls = list.filter((x) => x.loc.group === 'hall');
   const cafes = list.filter((x) => x.loc.group === 'cafe');
-  const rowsHalls = buildRows(halls, day);
-  const rowsCafes = buildRows(cafes, day);
+  const rowsRec = buildRows(rec, day, dateStr);
+  const rowsHalls = buildRows(halls, day, dateStr);
+  const rowsCafes = buildRows(cafes, day, dateStr);
 
   const noResults = state.query.trim() && list.length === 0;
 
@@ -167,6 +177,7 @@ function renderToday() {
     </div>
     <div class="body-scroll">
       ${noResults ? `<div class="empty-state">No locations match "${esc(state.query.trim())}".</div>` : `
+        ${renderGroup('Recreation', `${rec.filter((x) => x.st.kind !== 'closed').length} open`, rowsRec)}
         ${renderGroup('Dining halls', `${halls.filter((x) => x.st.kind !== 'closed').length} serving`, rowsHalls)}
         ${renderGroup('Cafés & markets', `${cafes.filter((x) => x.st.kind !== 'closed').length} serving`, rowsCafes)}
       `}
@@ -229,7 +240,8 @@ function renderWeek() {
         ${LOCATIONS.map((loc) => `
           <button class="week-row" data-action="open-detail" data-id="${loc.id}">
             <span class="week-name">${esc(loc.name)}</span>
-            ${loc.days.map((ps) => {
+            ${loc.days.map((ps, i) => {
+              ps = periodsFor(loc, i, dateKeyForDayIndex(i));
               const h = spanMinutes(ps) / 60;
               let bg = 'rgba(255,255,255,.04)', ink = 'rgba(242,243,244,.45)', label = '·';
               if (h >= 8) { bg = 'rgba(52,199,89,.85)'; ink = '#08130b'; label = Math.round(h); }
@@ -273,12 +285,86 @@ function renderNotes() {
 
 // ---------- Detail screen ----------
 
+const GROUP_LABELS = { hall: 'Dining hall', cafe: 'Café & market', rec: 'Recreation' };
+
+// Builds the period-list + posted-week data for one schedule (the location's
+// primary schedule, or its `secondary` one, e.g. a climbing wall) on a given day.
+function buildScheduleSection(schedule, day, dateStr) {
+  const isToday = day === state.today;
+  const ps = periodsFor(schedule, day, dateStr);
+
+  const periods = ps.map((pd) => {
+    const cur = isToday && state.now >= pd.s && state.now < pd.e;
+    const done = isToday && state.now >= pd.e;
+    return {
+      l: pd.l,
+      range: fmtRange(pd),
+      state: cur ? 'Open now' : done ? 'Finished' : isToday ? 'Later today' : 'Scheduled',
+      bg: cur ? 'rgba(52,199,89,.14)' : 'var(--card)',
+      border: cur ? 'rgba(52,199,89,.35)' : 'var(--border)',
+      ink: done ? 'rgba(242,243,244,.45)' : '#f2f3f4',
+      subColor: cur ? '#5ddc80' : 'rgba(242,243,244,.62)',
+      dot: cur ? '#34c759' : done ? 'rgba(242,243,244,.28)' : 'rgba(235,51,68,.8)'
+    };
+  });
+
+  const spanLine = ps.length ? `Posted ${fmtTime(ps[0].s)} – ${fmtTime(ps[ps.length - 1].e)}` : 'Closed all day';
+
+  const week = schedule.days.map((_, i) => {
+    const wps = periodsFor(schedule, i, dateKeyForDayIndex(i));
+    return {
+      day: DAY_NAMES[i].slice(0, 3),
+      range: wps.length ? `${fmtTime(wps[0].s)} – ${fmtTime(wps[wps.length - 1].e)}` : 'Closed',
+      meta: wps.length ? `${wps.length} ${wps.length > 1 ? 'periods' : 'period'}` : '—',
+      isSel: i === day,
+      ink: wps.length ? '#f2f3f4' : 'rgba(242,243,244,.45)'
+    };
+  });
+
+  return { periods, spanLine, week };
+}
+
+function renderScheduleBlock(title, section, day) {
+  const isToday = day === state.today;
+  return `
+    ${title ? `<div class="detail-section-title" style="padding:0 4px 10px">${esc(title)}</div>` : ''}
+    <div class="detail-section-head">
+      <span class="detail-section-title">${isToday ? 'Today · ' : ''}${DAY_NAMES[day]}</span>
+      <span class="detail-section-meta">${esc(section.spanLine)}</span>
+    </div>
+    <div class="period-list">
+      ${section.periods.length ? section.periods.map((pd) => `
+        <div class="period-card" style="background:${pd.bg};border-color:${pd.border}">
+          <div class="period-left">
+            <span class="period-dot" style="background:${pd.dot}"></span>
+            <div>
+              <div class="period-name" style="color:${pd.ink}">${esc(pd.l)}</div>
+              <div class="period-state" style="color:${pd.subColor}">${esc(pd.state)}</div>
+            </div>
+          </div>
+          <span class="period-range" style="color:${pd.ink}">${esc(pd.range)}</span>
+        </div>
+      `).join('') : `<div class="empty-state" style="padding:24px 0">Nothing posted for ${DAY_NAMES[day]}.</div>`}
+    </div>
+    <div class="posted-week-title">Posted week</div>
+    <div class="posted-week">
+      ${section.week.map((w) => `
+        <div class="posted-week-row" style="background:${w.isSel ? 'rgba(235,51,68,.12)' : 'transparent'};border-left-color:${w.isSel ? '#eb3344' : 'transparent'}">
+          <span class="posted-week-day" style="color:${w.ink}">${w.day}</span>
+          <span class="posted-week-meta">${esc(w.meta)}</span>
+          <span class="posted-week-range" style="color:${w.ink}">${esc(w.range)}</span>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
 function renderDetail(id) {
   const loc = LOCATIONS.find((l) => l.id === id);
   const day = selectedDay();
-  const st = statusFor(loc, day, state.today, state.now);
+  const dateStr = dateKeyForDayIndex(day);
+  const st = statusFor(periodsFor(loc, day, dateStr), day === state.today, state.now);
   const p = pillFor(st);
-  const isToday = day === state.today;
 
   const statusLine = st.kind === 'closed'
     ? `No service posted for ${DAY_NAMES[day]}`
@@ -288,37 +374,16 @@ function renderDetail(id) {
         ? `${st.sub} starts ${fmtTime(st.next.s)}`
         : st.label;
 
-  const periods = (loc.days[day] || []).map((pd) => {
-    const cur = isToday && state.now >= pd.s && state.now < pd.e;
-    const done = isToday && state.now >= pd.e;
-    return {
-      l: pd.l,
-      range: fmtRange(pd),
-      state: cur ? 'Serving now' : done ? 'Finished' : isToday ? 'Later today' : 'Scheduled',
-      bg: cur ? 'rgba(52,199,89,.14)' : 'var(--card)',
-      border: cur ? 'rgba(52,199,89,.35)' : 'var(--border)',
-      ink: done ? 'rgba(242,243,244,.45)' : '#f2f3f4',
-      subColor: cur ? '#5ddc80' : 'rgba(242,243,244,.62)',
-      dot: cur ? '#34c759' : done ? 'rgba(242,243,244,.28)' : 'rgba(235,51,68,.8)'
-    };
-  });
+  const primary = buildScheduleSection(loc, day, dateStr);
+  const secondary = loc.secondary ? buildScheduleSection(loc.secondary, day, dateStr) : null;
 
-  const spanLine = (loc.days[day] || []).length
-    ? `Posted ${fmtTime(loc.days[day][0].s)} – ${fmtTime(loc.days[day][loc.days[day].length - 1].e)}`
-    : 'Closed all day';
-
-  const week = loc.days.map((ps, i) => ({
-    day: DAY_NAMES[i].slice(0, 3),
-    range: ps.length ? `${fmtTime(ps[0].s)} – ${fmtTime(ps[ps.length - 1].e)}` : 'Closed',
-    meta: ps.length ? `${ps.length} ${ps.length > 1 ? 'periods' : 'period'}` : '—',
-    isSel: i === day,
-    ink: ps.length ? '#f2f3f4' : 'rgba(242,243,244,.45)'
-  }));
+  const activeOverride = loc.overrides && loc.overrides[dateStr];
+  const noteText = (activeOverride && activeOverride.note) || loc.note;
 
   return `
     <div class="detail-topbar">
       <button class="back-btn" data-action="close-detail" aria-label="Back">${icon.back}</button>
-      <span class="detail-group-label">${loc.group === 'hall' ? 'Dining hall' : 'Café & market'}</span>
+      <span class="detail-group-label">${esc(GROUP_LABELS[loc.group] || loc.group)}</span>
     </div>
     <div class="detail-head">
       <div class="detail-name">${esc(loc.name)}</div>
@@ -333,36 +398,10 @@ function renderDetail(id) {
     </div>
     ${renderDayStrip()}
     <div class="body-scroll">
-      <div class="detail-section-head">
-        <span class="detail-section-title">${isToday ? 'Today · ' : ''}${DAY_NAMES[day]}</span>
-        <span class="detail-section-meta">${esc(spanLine)}</span>
-      </div>
-      <div class="period-list">
-        ${periods.length ? periods.map((pd) => `
-          <div class="period-card" style="background:${pd.bg};border-color:${pd.border}">
-            <div class="period-left">
-              <span class="period-dot" style="background:${pd.dot}"></span>
-              <div>
-                <div class="period-name" style="color:${pd.ink}">${esc(pd.l)}</div>
-                <div class="period-state" style="color:${pd.subColor}">${esc(pd.state)}</div>
-              </div>
-            </div>
-            <span class="period-range" style="color:${pd.ink}">${esc(pd.range)}</span>
-          </div>
-        `).join('') : `<div class="empty-state" style="padding:24px 0">Nothing posted for ${DAY_NAMES[day]}.</div>`}
-      </div>
-      ${loc.note ? `<div class="note-callout">${esc(loc.note)}</div>` : ''}
-      <div class="posted-week-title">Posted week</div>
-      <div class="posted-week">
-        ${week.map((w) => `
-          <div class="posted-week-row" style="background:${w.isSel ? 'rgba(235,51,68,.12)' : 'transparent'};border-left-color:${w.isSel ? '#eb3344' : 'transparent'}">
-            <span class="posted-week-day" style="color:${w.ink}">${w.day}</span>
-            <span class="posted-week-meta">${esc(w.meta)}</span>
-            <span class="posted-week-range" style="color:${w.ink}">${esc(w.range)}</span>
-          </div>
-        `).join('')}
-      </div>
-      <div class="footnote">Source: posted BC Dining schedule, week of September 13, 2026. Subject to change; break and exam periods differ.</div>
+      ${renderScheduleBlock(secondary ? loc.name : '', primary, day)}
+      ${noteText ? `<div class="note-callout">${esc(noteText)}</div>` : ''}
+      ${secondary ? `<div style="height:22px"></div>${renderScheduleBlock(loc.secondary.title, secondary, day)}` : ''}
+      <div class="footnote">Source: posted BC schedule, week of September 13, 2026. Subject to change; break and exam periods differ.</div>
     </div>
   `;
 }
