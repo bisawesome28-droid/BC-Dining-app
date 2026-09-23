@@ -255,9 +255,9 @@ function renderToday() {
     </div>
     <div class="body-scroll">
       ${noResults ? `<div class="empty-state">No locations match "${esc(state.query.trim())}".</div>` : `
-        ${renderGroup('Campus Services', `${rec.filter((x) => x.st.kind !== 'closed').length} open`, rowsRec)}
         ${renderGroup('Dining halls', `${halls.filter((x) => x.st.kind !== 'closed').length} serving`, rowsHalls)}
         ${renderGroup('Cafés & markets', `${cafes.filter((x) => x.st.kind !== 'closed').length} serving`, rowsCafes)}
+        ${renderGroup('Campus Services', `${rec.filter((x) => x.st.kind !== 'closed').length} open`, rowsRec)}
         ${renderGroup('Libraries', `${libs.filter((x) => x.st.kind === 'open').length} open`, rowsLibs)}
       `}
       <div class="footnote">Posted schedule, week of September 13. Subject to change.</div>
