@@ -92,6 +92,19 @@ button, input {
 
 /* ---------- Day strip ---------- */
 
+/* Wraps .header/.detail-topbar+.detail-head together with .day-strip so the
+   banner is one continuous gradient painted once across the full height,
+   instead of two separately-computed gradients meeting at a visible seam
+   where their colors don't quite line up. */
+.banner {
+  flex: none;
+  background: linear-gradient(160deg, #6e0912 0%, #56020a 55%, #3d0107 100%);
+}
+.banner .header,
+.banner .day-strip {
+  background: none;
+}
+
 .day-strip {
   flex: none;
   padding: 4px 20px 20px;
@@ -407,9 +420,7 @@ button, input {
 .tab-label { font: 600 10px/1 -apple-system, system-ui, sans-serif; letter-spacing: 0.02em; }
 
 /* ---------- Detail screen ---------- */
-
 .detail-topbar {
-  flex: none;
   display: flex;
   align-items: center;
   gap: 9px;
@@ -419,7 +430,7 @@ button, input {
   width: 34px;
   height: 34px;
   border-radius: 17px;
-  background: var(--neutral-wash);
+  background: rgba(251, 246, 236, 0.14);
   border: 0;
   display: flex;
   align-items: center;
@@ -430,16 +441,17 @@ button, input {
   font: 600 12px/1 -apple-system, system-ui, sans-serif;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--ink-dim);
+  color: #d9bd7a;
 }
-.detail-head { flex: none; padding: 0 20px 18px; }
+.detail-head { padding: 0 20px 18px; }
 .detail-name {
   font: 700 32px/1.08 -apple-system, system-ui, sans-serif;
   letter-spacing: -0.035em;
+  color: #fbf6ec;
 }
 .detail-place {
   font: 400 13px/1.4 -apple-system, system-ui, sans-serif;
-  color: var(--ink-dim);
+  color: rgba(251, 246, 236, 0.72);
   margin-top: 6px;
 }
 .detail-tags {
@@ -449,13 +461,13 @@ button, input {
   margin-top: 16px;
   flex-wrap: wrap;
 }
-.detail-status-line { font: 500 13px/1.2 -apple-system, system-ui, sans-serif; color: var(--ink-dim); }
+.detail-status-line { font: 500 13px/1.2 -apple-system, system-ui, sans-serif; color: rgba(251, 246, 236, 0.78); }
 
 .detail-section-head {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  padding: 2px 4px 11px;
+  padding: 16px 4px 11px;
 }
 .detail-section-title {
   font: 600 12px/1 -apple-system, system-ui, sans-serif;

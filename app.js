@@ -44,7 +44,7 @@ const icon = {
   week: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><rect x="3.5" y="5" width="17" height="15" rx="3"></rect><path d="M3.5 10h17M8.5 3.2v3.4M15.5 3.2v3.4"></path></svg>`,
   shuttle: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><rect x="3.5" y="5.5" width="17" height="11" rx="3"></rect><path d="M3.5 11h17M7 16.5v2M17 16.5v2"></path><circle cx="7.5" cy="16.2" r=".4" fill="currentColor"></circle><circle cx="16.5" cy="16.2" r=".4" fill="currentColor"></circle></svg>`,
   external: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 5h5v5M18.5 5.5 10 14"></path><path d="M18 13v5a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h5"></path></svg>`,
-  back: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#242124" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 5.5 8 12l6.5 6.5"></path></svg>`
+  back: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fbf6ec" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 5.5 8 12l6.5 6.5"></path></svg>`
 };
 
 // ---------- Pill styling per status kind ----------
@@ -161,16 +161,18 @@ function renderToday() {
   const noResults = state.query.trim() && list.length === 0;
 
   return `
-    <div class="header">
-      <div class="header-row">
-        <div>
-          <div class="wordmark">BC Dining</div>
-          <div class="headline">${esc(headline)}</div>
-          <div class="subline">${esc(subline)}</div>
+    <div class="banner">
+      <div class="header">
+        <div class="header-row">
+          <div>
+            <div class="wordmark">BC Dining</div>
+            <div class="headline">${esc(headline)}</div>
+            <div class="subline">${esc(subline)}</div>
+          </div>
         </div>
       </div>
+      ${renderDayStrip()}
     </div>
-    ${renderDayStrip()}
     <div class="search-wrap">
       <div class="search-box">
         ${icon.search}
@@ -442,22 +444,24 @@ function renderDetail(id) {
   const noteText = (activeOverride && activeOverride.note) || loc.note;
 
   return `
-    <div class="detail-topbar">
-      <button class="back-btn" data-action="close-detail" aria-label="Back">${icon.back}</button>
-      <span class="detail-group-label">${esc(GROUP_LABELS[loc.group] || loc.group)}</span>
-    </div>
-    <div class="detail-head">
-      <div class="detail-name">${esc(loc.name)}</div>
-      <div class="detail-place">${esc(loc.place)}</div>
-      <div class="detail-tags">
-        <span class="pill" style="background:${p.bg};color:${p.ink}">
-          <span class="pill-dot" style="background:${p.dot}"></span>
-          <span class="pill-text">${esc(p.text)}</span>
-        </span>
-        <span class="detail-status-line">${esc(statusLine)}</span>
+    <div class="banner">
+      <div class="detail-topbar">
+        <button class="back-btn" data-action="close-detail" aria-label="Back">${icon.back}</button>
+        <span class="detail-group-label">${esc(GROUP_LABELS[loc.group] || loc.group)}</span>
       </div>
+      <div class="detail-head">
+        <div class="detail-name">${esc(loc.name)}</div>
+        <div class="detail-place">${esc(loc.place)}</div>
+        <div class="detail-tags">
+          <span class="pill" style="background:${p.bg};color:${p.ink}">
+            <span class="pill-dot" style="background:${p.dot}"></span>
+            <span class="pill-text">${esc(p.text)}</span>
+          </span>
+          <span class="detail-status-line">${esc(statusLine)}</span>
+        </div>
+      </div>
+      ${renderDayStrip()}
     </div>
-    ${renderDayStrip()}
     <div class="body-scroll">
       ${renderScheduleBlock(secondary ? loc.name : '', primary, day)}
       ${noteText ? `<div class="note-callout">${esc(noteText)}</div>` : ''}
