@@ -45,9 +45,36 @@ const climbFri = [P('Open', '11:00', '18:00')];
 const mailWk = [P('Open', '10:00', '18:00')];
 const mailSat = [P('Open', '10:00', '15:00')];
 
+// Newton Campus — Stuart Dining Hall + Legal Grounds Café & Market.
+// Source: BC_Newton_Dining_Hours.pdf, verified September 23, 2026.
+// Thursday dinner is absent from BC's posted schedule on both checked weeks
+// (Sept 24 and Oct 1) — treated as unconfirmed and omitted, not shown as closed.
+const stuartWk = [P('Breakfast', '7:15', '10:30'), P('Lunch', '11:00', '14:30'), P('Lite fare', '14:30', '16:00'), P('Dinner', '16:30', '20:30'), P('Late night', '21:00', '23:00')];
+const stuartThu = [P('Breakfast', '7:15', '10:30'), P('Lunch', '11:00', '14:30'), P('Lite fare', '14:30', '16:00'), P('Late night', '21:00', '23:00')];
+const stuartFri = [P('Breakfast', '7:15', '10:30'), P('Lunch', '11:00', '14:30'), P('Lite fare', '14:30', '16:00'), P('Dinner', '16:30', '20:30')];
+const stuartSat = [P('Breakfast', '9:00', '11:00'), P('Lunch', '11:00', '14:30'), P('Lite fare', '14:30', '16:00'), P('Dinner', '16:30', '20:30')];
+const stuartSun = [P('Breakfast', '9:00', '11:00'), P('Lunch', '11:00', '14:30'), P('Lite fare', '14:30', '16:00'), P('Dinner', '16:30', '20:30'), P('Late night', '21:00', '23:00')];
+const legalWk = [P('Open', '8:00', '18:00')];
+const legalFri = [P('Open', '8:00', '15:00')];
+const legalWe = [P('Open', '10:00', '15:30')];
+
 // days[] is indexed Sun=0 .. Sat=6
 export const LOCATIONS = [
   L('mailroom', 'Mailroom', 'McElroy Commons', 'rec', [X, mailWk, mailWk, mailWk, mailWk, mailWk, mailSat]),
+  L('stuart', 'Stuart Dining Hall', 'Stuart Hall · Newton Campus', 'hall',
+    [stuartSun, stuartWk, stuartWk, stuartWk, stuartThu, stuartFri, stuartSat],
+    'Thursday dinner isn’t listed on BC’s posted schedule — treated as unconfirmed, not closed.'),
+  L('legal', 'Legal Grounds Café & Market', 'Inside Stuart Hall · Newton Campus', 'cafe',
+    [legalWe, legalWk, legalWk, legalWk, legalWk, legalFri, legalWe],
+    undefined,
+    {
+      overrides: {
+        '2026-09-26': {
+          periods: [],
+          note: 'Closed today per BC’s posted schedule. Regular Saturday hours (10 am–3:30 pm) resume Oct. 3.'
+        }
+      }
+    }),
   L('rec', 'Margot Connell Recreation Center', 'Flynn Recreation Complex', 'rec',
     [recSun, recWk, recWk, recWk, recWk, recFri, recSat],
     undefined,
