@@ -28,7 +28,8 @@ const state = {
   openRows: new Set(),
   shuttleStop: null,
   filterGroup: 'all', // 'all' | 'hall' | 'cafe' | 'rec' | 'library' — resets to 'all' on every fresh load, not persisted
-  justToggledId: null // set right before a row-expand toggle, consumed by the next render
+  justToggledId: null, // set right before a row-expand toggle, consumed by the next render
+  menus: null // null while loading; { locations, generatedAt } once menus.json has loaded (see fetch below)
 };
 
 function selectedDay() {
@@ -511,6 +512,52 @@ function renderScheduleBlock(title, section, day) {
   `;
 }
 
+// Today's/selected-day's menu for one dining hall/café, from menus.json —
+// populated by .github/workflows/update-menus.yml from BC Dining's own feed,
+// 3x/day. Only ever shows what that feed actually posted: if this location
+// never matched anything in the feed, the section is omitted entirely rather
+// than showing an empty "no menu" box for a place that structurally never
+// has one; if it matched but has nothing for this specific date, that's
+// shown honestly rather than left blank with no explanation.
+function renderMenuSection(loc, day, dateStr) {
+  if (loc.group !== 'hall' && loc.group !== 'cafe') return '';
+  const menus = state.menus;
+  if (!menus) {
+    return `<div class="posted-week-title">Menu</div><div class="empty-state" style="padding:24px 0">Loading menu…</div>`;
+  }
+  const locMenus = menus.locations && menus.locations[loc.id];
+  if (!locMenus) return '';
+
+  const title = day === state.today ? 'Today’s Menu' : `${DAY_NAMES[day]}’s Menu`;
+  const dayMenus = locMenus[dateStr];
+  if (!dayMenus || !dayMenus.length) {
+    return `
+      <div class="posted-week-title">${esc(title)}</div>
+      <div class="empty-state" style="padding:24px 0">No menu posted for ${esc(DAY_NAMES[day])}.</div>
+    `;
+  }
+
+  return `
+    <div class="posted-week-title">${esc(title)}</div>
+    <div class="menu-meals">
+      ${dayMenus.map((meal) => `
+        <div class="menu-meal">
+          <div class="menu-meal-name">${esc(meal.meal)}</div>
+          ${meal.categories.map((cat) => `
+            <div class="menu-category">
+              <div class="menu-category-name">${esc(cat.category)}</div>
+              <ul class="menu-items">
+                ${cat.items.map((item) => `<li class="menu-item">${esc(item.name)}</li>`).join('')}
+              </ul>
+            </div>
+          `).join('')}
+        </div>
+      `).join('')}
+    </div>
+    <div class="footnote" style="padding-top:6px">Menu from BC Dining’s own feed, refreshed a few times a day. Items can change without notice.</div>
+  `;
+}
+
 function renderDetail(id) {
   const lib = LIBRARIES.find((l) => l.id === id);
   if (lib) return renderLibraryDetail(lib);
@@ -558,6 +605,7 @@ function renderDetail(id) {
       ${renderScheduleBlock(secondary ? loc.name : '', primary, day)}
       ${noteText ? `<div class="note-callout">${esc(noteText)}</div>` : ''}
       ${secondary ? `<div style="height:22px"></div>${renderScheduleBlock(loc.secondary.title, secondary, day)}` : ''}
+      ${renderMenuSection(loc, day, dateStr)}
       <div class="footnote">Source: posted BC schedule, week of September 13, 2026. Subject to change; break and exam periods differ.</div>
     </div>
   `;
@@ -779,6 +827,15 @@ setInterval(() => {
 }, 30000);
 
 render();
+
+// Loaded once at boot, not re-fetched per render — it's refreshed on disk a
+// few times a day by a scheduled job, not something this session needs to
+// poll for. A failure here just means menu sections stay hidden (see
+// renderMenuSection), never a fake/empty state presented as real data.
+fetch('./menus.json')
+  .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`menus.json ${res.status}`))))
+  .then((data) => setState({ menus: data }))
+  .catch(() => setState({ menus: { locations: {}, generatedAt: null } }));
 
 // Confirmed via live device inspection: on this iOS standalone install,
 // window.innerHeight under-reports the true screen by exactly the top

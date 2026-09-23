@@ -1,0 +1,42 @@
+name: Update dining menus
+
+# Refreshes menus.json from BC Dining's live feed 3x/day. This has to run
+# here (server-side) rather than as a client-side fetch in app.js, because
+# BC's feed doesn't send CORS headers allowing a browser on a different
+# origin to read it directly — confirmed by testing a fetch() against it from
+# the deployed app, which failed with a CORS error. A scheduled job isn't
+# subject to that (CORS is a browser-only restriction), so it can fetch the
+# real data and republish it as a same-origin file the app can read.
+#
+# Times below are 6am / 11am / 4pm US Eastern, converted to UTC assuming EDT
+# (UTC-4). GitHub Actions cron always runs in UTC with no DST awareness, so
+# during EST months (roughly early Nov–early Mar) these will actually fire
+# an hour earlier than intended (5am/10am/3pm ET) until manually adjusted.
+on:
+  schedule:
+    - cron: '0 10,15,20 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  update-menus:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Fetch and transform BC Dining's menu feed
+        run: node scripts/fetch-menus.mjs
+
+      - name: Commit menus.json if it changed
+        run: |
+          git config user.name "menu-bot"
+          git config user.email "menu-bot@users.noreply.github.com"
+          git add menus.json
+          git diff --cached --quiet || git commit -m "Update dining menus"
+          git push

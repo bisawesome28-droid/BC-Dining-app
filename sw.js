@@ -1,4 +1,4 @@
-const CACHE = 'heights-now-v32';
+const CACHE = 'heights-now-v33';
 const ASSETS = [
   './',
   './index.html',
@@ -8,6 +8,7 @@ const ASSETS = [
   './hours.js',
   './shuttle.js',
   './libraries.js',
+  './menus.json',
   './manifest.webmanifest',
   './icons/icon-192.png',
   './icons/icon-512.png'
