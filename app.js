@@ -187,6 +187,14 @@ const FILTER_TABS = [
   { key: 'library', label: 'Libraries' }
 ];
 
+const SEARCH_PLACEHOLDER = {
+  all: 'Search everything',
+  hall: 'Search dining',
+  cafe: 'Search cafés',
+  rec: 'Search campus services',
+  library: 'Search libraries'
+};
+
 function computeList(day, dateStr) {
   const q = state.query.trim().toLowerCase();
   const isToday = day === state.today;
@@ -245,7 +253,7 @@ function renderToday() {
     <div class="search-wrap">
       <div class="search-box">
         ${icon.search}
-        <input type="text" placeholder="Search dining" value="${esc(state.query)}" data-action="search" />
+        <input type="text" placeholder="${esc(SEARCH_PLACEHOLDER[state.filterGroup] || 'Search')}" value="${esc(state.query)}" data-action="search" />
       </div>
     </div>
     <div class="filter-strip">
