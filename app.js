@@ -188,7 +188,7 @@ const FILTER_TABS = [
 ];
 
 const SEARCH_PLACEHOLDER = {
-  all: 'Search everything',
+  all: 'Search campus',
   hall: 'Search dining',
   cafe: 'Search cafés',
   rec: 'Search campus services',
