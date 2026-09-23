@@ -1,6 +1,7 @@
 import { LOCATIONS, DAY_NAMES, DAY_LETTERS } from './data.js';
 import { fmtTime, fmtRange, fmtDuration, statusFor, rank, spanMinutes, periodsFor, dateKey } from './hours.js';
 import { STOPS, stopInfo, activeWindow, fmtClock, freqLabel, EARLY_LOOP, SPECIAL_SERVICE_NOTICES, SCHEDULE_CHECKED, LIVE_TRACKER_URL } from './shuttle.js';
+import { LIBRARIES, libraryStatusFor, LIBRARIES_CHECKED, LIBRARIES_HUB_URL } from './libraries.js';
 
 const root = document.getElementById('app');
 let searchDebounce = null;
@@ -24,7 +25,8 @@ const state = {
   detailId: null,
   query: '',
   openRows: new Set(),
-  shuttleStop: null
+  shuttleStop: null,
+  filterGroup: 'all' // 'all' | 'hall' | 'cafe' | 'rec' | 'library' — resets to 'all' on every fresh load, not persisted
 };
 
 function selectedDay() {
@@ -54,7 +56,45 @@ function pillFor(st) {
   if (st.kind === 'soon') return { text: 'Closing', bg: 'var(--amber-wash)', ink: 'var(--amber-ink)', dot: 'var(--amber)' };
   if (st.kind === 'later') return { text: `Opens ${fmtTime(st.next.s)}`, bg: 'var(--neutral-wash)', ink: 'rgba(36,33,36,.72)', dot: 'rgba(36,33,36,.62)' };
   if (st.kind === 'sched') return { text: st.label, bg: 'var(--neutral-wash)', ink: 'rgba(36,33,36,.72)', dot: 'rgba(36,33,36,.62)' };
+  if (st.kind === 'unknown') return { text: 'Check hours', bg: 'var(--amber-wash)', ink: 'var(--amber-ink)', dot: 'var(--amber)' };
   return { text: 'Closed', bg: 'rgba(36,33,36,.06)', ink: 'rgba(36,33,36,.4)', dot: 'rgba(36,33,36,.18)' };
+}
+
+// Libraries follow a dated calendar, not a recurring weekly pattern, and some
+// checked days are genuinely incomplete (an open event with no posted close).
+// This maps that into the same {kind, label, sub} shape dining's statusFor
+// produces, so library rows can sort/render through the same list — but only
+// ever as 'open' | 'closed' | 'unknown' | 'sched', never fabricating a 'soon'
+// or 'later' countdown the source data doesn't support.
+function libraryRowStatus(lib, dateStr, isToday) {
+  if (isToday) {
+    const r = libraryStatusFor(lib, dateStr, state.now);
+    if (r.kind === 'open') {
+      const sub = r.closesAt != null
+        ? `Open until ${fmtTime(r.closesAt)}`
+        : r.spillsToNextDay
+          ? `Open until ${fmtTime(r.nextDayCloseAt)} (next day)`
+          : 'Open — closing time not posted';
+      return { kind: 'open', label: 'Open', sub, cur: null };
+    }
+    if (r.kind === 'unknown') return { kind: 'unknown', label: 'Check hours', sub: 'Hours not fully posted for today — check BC’s calendar', cur: null };
+    return { kind: 'closed', label: 'Closed', sub: 'Closed right now', cur: null };
+  }
+  const windows = lib.windows[dateStr];
+  if (!windows) return { kind: 'unknown', label: 'Check hours', sub: 'Hours not posted for this date — check BC’s calendar', cur: null };
+  const [s, e] = windows[0];
+  let label;
+  if (e === null) {
+    label = `Opens ${fmtTime(s)}, no close posted`;
+  } else if (e - s >= 1440) {
+    label = 'Open 24 hours';
+  } else if (e > 1440) {
+    label = `${fmtTime(s)}–${fmtTime(e - 1440)} (next day)`;
+  } else {
+    label = `${fmtTime(s)}–${fmtTime(e)}`;
+    if (lib.gapStatus === 'unknown') label += ', then unconfirmed';
+  }
+  return { kind: 'sched', label, sub: 'Posted hours for that day', cur: null };
 }
 
 function esc(s) {
@@ -68,14 +108,16 @@ function buildRows(list, day, dateStr) {
     const p = pillFor(st);
     const isOpen = st.kind === 'open' || st.kind === 'soon';
     const live = st.cur ? (state.now - st.cur.s) / (st.cur.e - st.cur.s) : 0;
-    const sub = isOpen
-      ? capitalize(st.sub)
-      : st.kind === 'later'
-        ? `${st.sub} starts ${fmtTime(st.next.s)}`
-        : st.kind === 'sched'
-          ? st.sub
-          : 'No service today';
-    const periods = periodsFor(loc, day, dateStr).map((pd) => {
+    const sub = loc.group === 'library'
+      ? st.sub
+      : isOpen
+        ? capitalize(st.sub)
+        : st.kind === 'later'
+          ? `${st.sub} starts ${fmtTime(st.next.s)}`
+          : st.kind === 'sched'
+            ? st.sub
+            : 'No service today';
+    const periods = loc.group === 'library' ? [] : periodsFor(loc, day, dateStr).map((pd) => {
       const cur = day === state.today && state.now >= pd.s && state.now < pd.e;
       return { l: pd.l, range: fmtRange(pd), cur };
     });
@@ -111,6 +153,14 @@ function renderRow(r) {
 }
 
 function renderRowPeriods(r) {
+  if (r.loc.group === 'library') {
+    return `
+      <div class="row-periods">
+        <div class="row-empty-note">${esc(r.loc.accessNote)}</div>
+        <span class="row-view-week" data-action="open-detail" data-id="${r.loc.id}">View details &rsaquo;</span>
+      </div>
+    `;
+  }
   if (!r.periods.length) {
     return `<div class="row-periods"><div class="row-empty-note">Nothing posted for ${DAY_NAMES[selectedDay()]}.</div></div>`;
   }
@@ -129,9 +179,21 @@ function renderRowPeriods(r) {
 
 // ---------- Today tab ----------
 
+const FILTER_TABS = [
+  { key: 'all', label: 'All' },
+  { key: 'hall', label: 'Dining halls' },
+  { key: 'cafe', label: 'Cafés' },
+  { key: 'rec', label: 'Campus Services' },
+  { key: 'library', label: 'Libraries' }
+];
+
 function computeList(day, dateStr) {
   const q = state.query.trim().toLowerCase();
-  let list = LOCATIONS.map((loc) => ({ loc, st: statusFor(periodsFor(loc, day, dateStr), day === state.today, state.now) }));
+  const isToday = day === state.today;
+  const dining = LOCATIONS.map((loc) => ({ loc, st: statusFor(periodsFor(loc, day, dateStr), isToday, state.now) }));
+  const libs = LIBRARIES.map((loc) => ({ loc, st: libraryRowStatus(loc, dateStr, isToday) }));
+  let list = dining.concat(libs);
+  if (state.filterGroup !== 'all') list = list.filter((x) => x.loc.group === state.filterGroup);
   if (q) list = list.filter((x) => `${x.loc.name} ${x.loc.place}`.toLowerCase().includes(q));
   list = list.slice().sort((a, b) => rank(a.st) - rank(b.st));
   return list;
@@ -143,20 +205,27 @@ function renderToday() {
   const list = computeList(day, dateStr);
   const openArr = list.filter((x) => x.st.kind === 'open');
   const soonArr = list.filter((x) => x.st.kind === 'soon');
-  const closeNext = openArr.concat(soonArr).sort((a, b) => a.st.cur.e - b.st.cur.e)[0];
+  // .cur is only ever set by dining's statusFor (a real countdown to a known
+  // close time) — libraries can be 'open' with no .cur, so this must be
+  // filtered down before sorting on .cur.e, not just filtered by kind.
+  const closeNext = openArr.concat(soonArr).filter((x) => x.st.cur).sort((a, b) => a.st.cur.e - b.st.cur.e)[0];
   const isToday = day === state.today;
 
-  const headline = isToday ? `${openArr.length + soonArr.length} open now` : DAY_NAMES[day];
+  const openNowCount = openArr.length + soonArr.length;
+  const headline = isToday ? `${openNowCount} open now` : DAY_NAMES[day];
   const subline = isToday
-    ? (closeNext ? `${closeNext.loc.name} closes in ${fmtDuration(closeNext.st.cur.e - state.now)}` : 'Nothing serving right now')
+    ? (closeNext ? `${closeNext.loc.name} closes in ${fmtDuration(closeNext.st.cur.e - state.now)}`
+      : openNowCount ? 'Open now — closing times vary' : 'Nothing serving right now')
     : `${list.filter((x) => x.st.kind !== 'closed').length} locations serving`;
 
   const rec = list.filter((x) => x.loc.group === 'rec');
   const halls = list.filter((x) => x.loc.group === 'hall');
   const cafes = list.filter((x) => x.loc.group === 'cafe');
+  const libs = list.filter((x) => x.loc.group === 'library');
   const rowsRec = buildRows(rec, day, dateStr);
   const rowsHalls = buildRows(halls, day, dateStr);
   const rowsCafes = buildRows(cafes, day, dateStr);
+  const rowsLibs = buildRows(libs, day, dateStr);
 
   const noResults = state.query.trim() && list.length === 0;
 
@@ -179,11 +248,17 @@ function renderToday() {
         <input type="text" placeholder="Search dining" value="${esc(state.query)}" data-action="search" />
       </div>
     </div>
+    <div class="filter-strip">
+      ${FILTER_TABS.map((t) => `
+        <button class="filter-chip${state.filterGroup === t.key ? ' is-selected' : ''}" data-action="pick-filter" data-group="${t.key}">${esc(t.label)}</button>
+      `).join('')}
+    </div>
     <div class="body-scroll">
       ${noResults ? `<div class="empty-state">No locations match "${esc(state.query.trim())}".</div>` : `
         ${renderGroup('Campus Services', `${rec.filter((x) => x.st.kind !== 'closed').length} open`, rowsRec)}
         ${renderGroup('Dining halls', `${halls.filter((x) => x.st.kind !== 'closed').length} serving`, rowsHalls)}
         ${renderGroup('Cafés & markets', `${cafes.filter((x) => x.st.kind !== 'closed').length} serving`, rowsCafes)}
+        ${renderGroup('Libraries', `${libs.filter((x) => x.st.kind === 'open').length} open`, rowsLibs)}
       `}
       <div class="footnote">Posted schedule, week of September 13. Subject to change.</div>
     </div>
@@ -348,7 +423,7 @@ function renderStopDetail(stopId, stopName, info) {
 
 // ---------- Detail screen ----------
 
-const GROUP_LABELS = { hall: 'Dining hall', cafe: 'Café & market', rec: 'Campus Services' };
+const GROUP_LABELS = { hall: 'Dining hall', cafe: 'Café & market', rec: 'Campus Services', library: 'Library' };
 
 // Builds the period-list + posted-week data for one schedule (the location's
 // primary schedule, or its `secondary` one, e.g. a climbing wall) on a given day.
@@ -423,6 +498,9 @@ function renderScheduleBlock(title, section, day) {
 }
 
 function renderDetail(id) {
+  const lib = LIBRARIES.find((l) => l.id === id);
+  if (lib) return renderLibraryDetail(lib);
+
   const loc = LOCATIONS.find((l) => l.id === id);
   const day = selectedDay();
   const dateStr = dateKeyForDayIndex(day);
@@ -467,6 +545,65 @@ function renderDetail(id) {
       ${noteText ? `<div class="note-callout">${esc(noteText)}</div>` : ''}
       ${secondary ? `<div style="height:22px"></div>${renderScheduleBlock(loc.secondary.title, secondary, day)}` : ''}
       <div class="footnote">Source: posted BC schedule, week of September 13, 2026. Subject to change; break and exam periods differ.</div>
+    </div>
+  `;
+}
+
+// Libraries follow a dated BC calendar rather than a recurring weekly
+// pattern, so their detail screen shows the specific checked dates rather
+// than a "posted week" grid, and a status line that can honestly say
+// "unknown" instead of guessing.
+function renderLibraryDetail(lib) {
+  const day = selectedDay();
+  const dateStr = dateKeyForDayIndex(day);
+  const isToday = day === state.today;
+  const st = libraryRowStatus(lib, dateStr, isToday);
+  const p = pillFor(st);
+
+  const weekRows = DAY_LETTERS.map((_, i) => {
+    const ds = dateKeyForDayIndex(i);
+    // Always the scheduled-hours label here, never the live status — this is
+    // a "posted week" table, same as dining's, so today's row reads the same
+    // way as every other row instead of switching to a live "Open" pill.
+    const rst = libraryRowStatus(lib, ds, false);
+    const isSel = i === day;
+    const ink = rst.kind === 'open' ? '#1d8a3e' : rst.kind === 'unknown' ? '#7a6a3a' : 'rgba(36,33,36,.55)';
+    return `
+      <div class="posted-week-row" style="background:${isSel ? 'rgba(86,2,10,.16)' : 'transparent'};border-left-color:${isSel ? '#56020a' : 'transparent'}">
+        <span class="posted-week-day" style="color:${ink}">${DAY_NAMES[i].slice(0, 3)}</span>
+        <span class="posted-week-meta">${esc(rst.label)}</span>
+        <span class="posted-week-range" style="color:${ink}"></span>
+      </div>
+    `;
+  }).join('');
+
+  return `
+    <div class="banner">
+      <div class="detail-topbar">
+        <button class="back-btn" data-action="close-detail" aria-label="Back">${icon.back}</button>
+        <span class="detail-group-label">Library</span>
+      </div>
+      <div class="detail-head">
+        <div class="detail-name">${esc(lib.name)}</div>
+        <div class="detail-place">${esc(lib.place)}</div>
+        <div class="detail-tags">
+          <span class="pill" style="background:${p.bg};color:${p.ink}">
+            <span class="pill-dot" style="background:${p.dot}"></span>
+            <span class="pill-text">${esc(p.text)}</span>
+          </span>
+          <span class="detail-status-line">${esc(st.sub)}</span>
+        </div>
+      </div>
+      ${renderDayStrip()}
+    </div>
+    <div class="body-scroll">
+      <div class="note-callout">${esc(lib.accessNote)}</div>
+      <div class="posted-week-title">This week</div>
+      <div class="posted-week">${weekRows}</div>
+      <a class="tracker-link" href="${lib.sourceUrl}" target="_blank" rel="noopener">
+        Open official hours page ${icon.external}
+      </a>
+      <div class="footnote">BC-published hours, checked ${esc(LIBRARIES_CHECKED)}. Not a live feed — future weeks, breaks, and finals periods aren't reflected here; see <a href="${LIBRARIES_HUB_URL}" target="_blank" rel="noopener" style="color:inherit">BC's library calendar</a> directly.</div>
     </div>
   `;
 }
@@ -551,6 +688,7 @@ function attachHandlers() {
         else next.add(id);
         setState({ openRows: next });
       } else if (action === 'pick-stop') setState({ shuttleStop: el.dataset.id });
+      else if (action === 'pick-filter') setState({ filterGroup: el.dataset.group });
     });
   });
 }
