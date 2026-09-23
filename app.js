@@ -188,11 +188,11 @@ const FILTER_TABS = [
 ];
 
 const SEARCH_PLACEHOLDER = {
-  all: 'Search campus',
-  hall: 'Search dining',
-  cafe: 'Search cafés',
-  rec: 'Search campus services',
-  library: 'Search libraries'
+  all: 'Search Campus',
+  hall: 'Search Dining',
+  cafe: 'Search Cafés',
+  rec: 'Search Campus Services',
+  library: 'Search Libraries'
 };
 
 function computeList(day, dateStr) {
