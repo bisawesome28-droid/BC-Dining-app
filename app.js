@@ -234,7 +234,7 @@ function renderToday() {
       <div class="header">
         <div class="header-row">
           <div>
-            <div class="wordmark">BC Dining</div>
+            <div class="wordmark">Heights Now</div>
             <div class="headline">${esc(headline)}</div>
             <div class="subline">${esc(subline)}</div>
           </div>
@@ -304,7 +304,7 @@ function renderWeek() {
     <div class="header">
       <div class="header-row">
         <div>
-          <div class="wordmark">BC Dining</div>
+          <div class="wordmark">Heights Now</div>
           <div class="headline">Posted week</div>
           <div class="subline">Hours of service by location and day</div>
         </div>
@@ -357,7 +357,7 @@ function renderShuttle() {
     <div class="header">
       <div class="header-row">
         <div>
-          <div class="wordmark">BC Dining</div>
+          <div class="wordmark">Heights Now</div>
           <div class="headline">${esc(headline)}</div>
           <div class="subline">${esc(subline)}</div>
         </div>
