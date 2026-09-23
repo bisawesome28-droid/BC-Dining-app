@@ -141,7 +141,10 @@ button, input {
 .search-box input {
   border: 0;
   background: transparent;
-  font: 400 15px/1.2 -apple-system, system-ui, sans-serif;
+  /* iOS Safari auto-zooms the page on focusing any input under 16px, and
+     doesn't reliably zoom back out on blur — 16px is the threshold to avoid
+     that entirely. */
+  font: 400 16px/1.2 -apple-system, system-ui, sans-serif;
   color: var(--ink);
   width: 100%;
   outline: none;

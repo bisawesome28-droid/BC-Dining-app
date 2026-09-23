@@ -1,6 +1,6 @@
 import { LOCATIONS, DAY_NAMES, DAY_LETTERS } from './data.js';
 import { fmtTime, fmtRange, fmtDuration, statusFor, rank, spanMinutes, periodsFor, dateKey } from './hours.js';
-import { STOPS, stopInfo, fmtClock, freqLabel, EARLY_LOOP, SPECIAL_SERVICE_NOTICES, SCHEDULE_CHECKED, LIVE_TRACKER_URL } from './shuttle.js';
+import { STOPS, stopInfo, activeWindow, fmtClock, freqLabel, EARLY_LOOP, SPECIAL_SERVICE_NOTICES, SCHEDULE_CHECKED, LIVE_TRACKER_URL } from './shuttle.js';
 
 const root = document.getElementById('app');
 let searchDebounce = null;
@@ -265,13 +265,16 @@ function renderShuttle() {
   const stopId = state.shuttleStop;
   const info = stopId ? stopInfo(stopId, state.now, state.today) : null;
   const stopName = stopId ? STOPS.find((s) => s.id === stopId).name : null;
+  // Overall service status (independent of any stop pick) so the tab is useful
+  // the instant you open it, not just after tapping a stop.
+  const overallWin = activeWindow(state.now, state.today);
 
   const headline = info
     ? (info.servedNow ? info.win.variant : info.win ? 'Not on this route right now' : 'No scheduled service right now')
-    : 'Newton Shuttle';
+    : (overallWin ? overallWin.variant : 'Not running right now');
   const subline = info
     ? (info.servedNow ? freqLabel(info.win.freq) : stopName)
-    : 'Choose a stop to see the regular schedule';
+    : (overallWin ? `Running · ${freqLabel(overallWin.freq)} · pick a stop below` : 'Pick a stop below for the regular schedule');
 
   return `
     <div class="header">
@@ -289,7 +292,7 @@ function renderShuttle() {
       `).join('')}
     </div>
     <div class="body-scroll">
-      ${info ? renderStopDetail(stopId, stopName, info) : `<div class="empty-state">Tap a stop above to see when the shuttle usually comes.</div>`}
+      ${info ? renderStopDetail(stopId, stopName, info) : `<div class="empty-state">Pick a stop above for its next departures.</div>`}
       <div class="note-card" style="margin-top:9px">
         <div class="note-key">Early loop</div>
         <div class="note-val">${esc(EARLY_LOOP.text)}</div>

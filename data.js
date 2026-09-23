@@ -41,8 +41,13 @@ const climbWk = [P('Open', '12:00', '20:00')];
 const climbWed = [P('Open', '12:00', '22:00')];
 const climbFri = [P('Open', '11:00', '18:00')];
 
+// Mailroom — hours as given by the user; building location not verified.
+const mailWk = [P('Open', '10:00', '18:00')];
+const mailSat = [P('Open', '10:00', '15:00')];
+
 // days[] is indexed Sun=0 .. Sat=6
 export const LOCATIONS = [
+  L('mailroom', 'Mailroom', 'McElroy Commons', 'rec', [X, mailWk, mailWk, mailWk, mailWk, mailWk, mailSat]),
   L('rec', 'Margot Connell Recreation Center', 'Flynn Recreation Complex', 'rec',
     [recSun, recWk, recWk, recWk, recWk, recFri, recSat],
     undefined,
@@ -77,13 +82,3 @@ export const LOCATIONS = [
 
 export const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 export const DAY_LETTERS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
-
-export const NOTES = [
-  { k: 'Recreation hours', v: 'The Margot Connell Recreation Center and its climbing wall run on separate schedules — the default weekly pattern is verified against BC’s posted calendars, not a live feed.' },
-  { k: 'Meal periods', v: 'Periods are listed separately. A gap between them is not confirmed service — the line closes and reopens.' },
-  { k: 'Midnight', v: 'Late-night service listed to midnight ends at the close of the listed day.' },
-  { k: 'Newton', v: 'Stuart Dining Hall and Legal Grounds on Newton Campus are not included.' },
-  { k: 'Breaks & exams', v: 'This is the regular weekly schedule. Break, holiday and exam periods run shortened hours.' },
-  { k: 'Hillside Friday', v: 'BC posts Friday lunch as 11 am–6 pm, overlapping lite fare and coffee. The published entries are kept as-is.' },
-  { k: 'Source', v: 'Posted BC Dining schedule, week of September 13, 2026. Subject to change.' }
-];
