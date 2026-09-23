@@ -26,7 +26,8 @@ const state = {
   query: '',
   openRows: new Set(),
   shuttleStop: null,
-  filterGroup: 'all' // 'all' | 'hall' | 'cafe' | 'rec' | 'library' — resets to 'all' on every fresh load, not persisted
+  filterGroup: 'all', // 'all' | 'hall' | 'cafe' | 'rec' | 'library' — resets to 'all' on every fresh load, not persisted
+  justToggledId: null // set right before a row-expand toggle, consumed by the next render
 };
 
 function selectedDay() {
@@ -130,7 +131,6 @@ function capitalize(s) {
 }
 
 function renderRow(r) {
-  const expanded = state.openRows.has(r.loc.id);
   const barFill = r.st.kind === 'soon' ? '#b8a269' : '#34c759';
   const barW = Math.max(3, Math.min(100, r.live * 100)).toFixed(1) + '%';
   return `
@@ -147,7 +147,7 @@ function renderRow(r) {
       </div>
       <div class="row-sub" style="color:${r.isOpen ? 'rgba(36,33,36,.78)' : 'rgba(36,33,36,.62)'}">${esc(r.sub)}</div>
       ${r.st.cur ? `<div class="row-bar-track"><div class="row-bar-fill" style="width:${barW};background:${barFill}"></div></div>` : ''}
-      ${expanded ? renderRowPeriods(r) : ''}
+      <div class="row-periods-wrap" data-periods-for="${r.loc.id}">${renderRowPeriods(r)}</div>
     </button>
   `;
 }
@@ -658,6 +658,7 @@ function render() {
   }
   root.innerHTML = body;
   attachHandlers();
+  syncRowPeriodHeights();
 
   if (restoreSearchFocus) {
     const input = root.querySelector('[data-action="search"]');
@@ -666,6 +667,52 @@ function render() {
       if (selStart !== null) input.setSelectionRange(selStart, selEnd);
     }
   }
+}
+
+// root.innerHTML fully replaces the DOM on every render, so nothing about a
+// previous element (its inline max-height, whether it was mid-transition)
+// survives from one render to the next — this re-establishes it every time.
+// Only the row named by justToggledId actually animates; every other open
+// row is snapped straight to its full height with no transition, since it
+// didn't just change state, it's only being redrawn for an unrelated reason.
+function syncRowPeriodHeights() {
+  const toggledId = state.justToggledId;
+  state.justToggledId = null;
+  root.querySelectorAll('[data-periods-for]').forEach((wrap) => {
+    const id = wrap.dataset.periodsFor;
+    const isOpen = state.openRows.has(id);
+    if (id !== toggledId) {
+      wrap.classList.remove('is-animating');
+      wrap.style.maxHeight = isOpen ? wrap.scrollHeight + 'px' : '0px';
+      wrap.style.opacity = isOpen ? '1' : '0';
+      return;
+    }
+    if (isOpen) {
+      const target = wrap.scrollHeight; // measured while still visually collapsed
+      requestAnimationFrame(() => {
+        wrap.classList.add('is-animating');
+        requestAnimationFrame(() => {
+          wrap.style.maxHeight = target + 'px';
+          wrap.style.opacity = '1';
+        });
+      });
+    } else {
+      // Closing: this is a fresh DOM node with no memory of how tall it
+      // looked a moment ago, so snap it to its current content height first
+      // (invisible to the viewer — it's the same height it already was),
+      // then transition down to 0 on the next frame.
+      wrap.classList.remove('is-animating');
+      wrap.style.maxHeight = wrap.scrollHeight + 'px';
+      wrap.style.opacity = '1';
+      requestAnimationFrame(() => {
+        wrap.classList.add('is-animating');
+        requestAnimationFrame(() => {
+          wrap.style.maxHeight = '0px';
+          wrap.style.opacity = '0';
+        });
+      });
+    }
+  });
 }
 
 function attachHandlers() {
@@ -694,6 +741,11 @@ function attachHandlers() {
         const next = new Set(state.openRows);
         if (next.has(id)) next.delete(id);
         else next.add(id);
+        // Consumed once by the very next render to decide which row actually
+        // animates open/closed — every other row just snaps to its settled
+        // height with no transition, so an unrelated re-render (the live
+        // clock tick, a search keystroke) never replays the animation.
+        state.justToggledId = id;
         setState({ openRows: next });
       } else if (action === 'pick-stop') setState({ shuttleStop: el.dataset.id });
       else if (action === 'pick-filter') setState({ filterGroup: el.dataset.group });

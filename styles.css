@@ -317,6 +317,14 @@ button, input {
 }
 .row-bar-fill { height: 4px; border-radius: 2px; }
 
+.row-periods-wrap {
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+}
+.row-periods-wrap.is-animating {
+  transition: max-height 0.28s cubic-bezier(0.25, 0.1, 0.25, 1), opacity 0.2s ease;
+}
 .row-periods {
   margin-top: 12px;
   display: flex;
