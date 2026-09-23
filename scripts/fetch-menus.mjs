@@ -34,7 +34,7 @@ const DATA_URL_2 = 'https://web.bc.edu/dining/menu/futureMenu_PROD.json';
 const LOCATION_ALIASES = {
   lower: ['lower live', 'lower'],
   mac: ['carney', 'mac'],
-  rat: ['welch', 'the rat', 'rat'],
+  rat: ['welch', 'the rat', 'rat', 'lyons'],
   addies: ["addie's", 'addies', 'loft at addie'],
   brookline: ['brookline', 'messina'],
   faculty: ['faculty dining', 'faculty'],
