@@ -5,6 +5,7 @@ import { LIBRARIES, libraryStatusFor, LIBRARIES_CHECKED, LIBRARIES_HUB_URL } fro
 
 const root = document.getElementById('app');
 let searchDebounce = null;
+let lastViewKey = null;
 
 function nowParts() {
   const n = new Date();
@@ -646,6 +647,16 @@ function render() {
   const selStart = restoreSearchFocus ? active.selectionStart : null;
   const selEnd = restoreSearchFocus ? active.selectionEnd : null;
 
+  // root.innerHTML rebuilds .body-scroll as a brand new element every render,
+  // which resets its scroll position to 0 — without this, expanding a row
+  // (which triggers a re-render) would always snap the page back to the top.
+  // Only carry it over when re-rendering the *same* screen though — switching
+  // tabs or opening a detail screen should still start at the top.
+  const viewKey = `${state.tab}:${state.detailId || ''}`;
+  const prevScroller = root.querySelector('.body-scroll');
+  const prevScrollTop = viewKey === lastViewKey && prevScroller ? prevScroller.scrollTop : 0;
+  lastViewKey = viewKey;
+
   let body;
   if (state.detailId) {
     body = renderDetail(state.detailId);
@@ -659,6 +670,9 @@ function render() {
   root.innerHTML = body;
   attachHandlers();
   syncRowPeriodHeights();
+
+  const nextScroller = root.querySelector('.body-scroll');
+  if (nextScroller && prevScrollTop) nextScroller.scrollTop = prevScrollTop;
 
   if (restoreSearchFocus) {
     const input = root.querySelector('[data-action="search"]');
