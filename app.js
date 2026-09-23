@@ -355,11 +355,15 @@ function renderShuttle() {
   // the instant you open it, not just after tapping a stop.
   const overallWin = activeWindow(state.now, state.today);
 
+  // Once a stop is picked, lead with the actual answer to "when's the next
+  // bus" instead of a route/variant name — the frequency window already IS
+  // a wait-time estimate (the longest you'd wait for a random arrival), just
+  // reframed as one instead of presented as schedule metadata.
   const headline = info
-    ? (info.servedNow ? info.win.variant : info.win ? 'Not on this route right now' : 'No scheduled service right now')
+    ? (info.servedNow ? `Next bus in about ${freqLabel(info.win.freq).replace('every ', '')}` : info.win ? 'Not on this route right now' : 'No scheduled service right now')
     : (overallWin ? overallWin.variant : 'Not running right now');
   const subline = info
-    ? (info.servedNow ? freqLabel(info.win.freq) : stopName)
+    ? (info.servedNow ? `${stopName} · ${info.win.variant}` : stopName)
     : (overallWin ? `Running · ${freqLabel(overallWin.freq)} · pick a stop below` : 'Pick a stop below for the regular schedule');
 
   return `
@@ -378,14 +382,15 @@ function renderShuttle() {
       `).join('')}
     </div>
     <div class="body-scroll">
+      <a class="tracker-link" href="${LIVE_TRACKER_URL}" target="_blank" rel="noopener">
+        Open BC live tracker — real bus positions ${icon.external}
+      </a>
+      <div style="height:14px"></div>
       ${info ? renderStopDetail(stopId, stopName, info) : `<div class="empty-state">Pick a stop above for its next departures.</div>`}
       <div class="note-card" style="margin-top:9px">
         <div class="note-key">Early loop</div>
         <div class="note-val">${esc(EARLY_LOOP.text)}</div>
       </div>
-      <a class="tracker-link" href="${LIVE_TRACKER_URL}" target="_blank" rel="noopener">
-        Open BC live tracker ${icon.external}
-      </a>
       <div class="group-head" style="margin-top:6px"><span class="group-title">Special service — verify dates first</span></div>
       <div class="notes-list">
         ${SPECIAL_SERVICE_NOTICES.map((n) => `
