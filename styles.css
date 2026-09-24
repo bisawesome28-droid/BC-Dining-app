@@ -210,6 +210,10 @@ button, input {
 }
 .filter-chip.is-selected { background: var(--accent); border-color: var(--accent); color: #fff; }
 
+/* Campus tab's pills sit directly under the red header with no search bar
+   in between, so they need their own top breathing room. */
+.campus-pills { padding-top: 16px; }
+
 .tracker-link {
   display: flex;
   align-items: center;

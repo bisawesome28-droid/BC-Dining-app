@@ -40,10 +40,15 @@ function normalizeOne(raw, instance) {
 
   if (!isUndergradRelevant(audienceNames, calendarNames, text)) return null;
 
+  // A ticket_url means Localist requires signing up/registering to attend —
+  // "free food" here means walk-up food, so a registration requirement
+  // disqualifies it even if the text mentions food being served.
+  const requiresRegistration = !!raw.ticket_url;
+
   const categories = [];
   const food = classifyFreeFood(text);
   let foodConfidence = null;
-  if (food && !isVirtual) {
+  if (food && !isVirtual && !requiresRegistration) {
     categories.push('free-food');
     foodConfidence = food;
   }

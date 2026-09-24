@@ -111,8 +111,22 @@ const POSITIVE_AUDIENCE = ['undergraduate students', 'students', 'all students',
 const NEGATIVE_AUDIENCE_TEXT = [
   'law school-only', 'law students only', 'jd-only', 'jd only',
   '1l-specific', '2l-specific', '3l-specific', 'mba-only', 'mba only',
+  'mba students', 'mba program', 'mba candidates', 'full-time mba',
   'graduate admission', 'phd-only', 'phd only', 'faculty-only', 'faculty only',
-  'staff-only', 'staff only'
+  'staff-only', 'staff only',
+  'international student support group', 'international students only',
+  'off-campus students', 'off campus students', 'commuter students',
+  'commuter student'
+];
+// Every entity in this list is a fully separate group from BC's on-campus
+// undergrad population (grad business students, international-student-only
+// support services, or students who live off campus) — an event whose ONLY
+// audience tags fall in here is not relevant to the general on-campus
+// undergrad feed this tab serves.
+const NARROW_AUDIENCE_NAMES = [
+  'graduate students', 'faculty/staff', 'alumni', 'parents',
+  'mba students', 'international students', 'off-campus students',
+  'commuter students'
 ];
 
 // True unless the event is clearly restricted away from undergrads — an
@@ -128,7 +142,7 @@ export function isUndergradRelevant(audienceNames, calendarNames, text) {
   const names = (audienceNames || []).map((n) => n.toLowerCase());
   if (names.length === 0) return true; // no metadata — don't exclude on absence alone
   if (names.some((n) => POSITIVE_AUDIENCE.includes(n))) return true;
-  // Metadata exists but names only grad/faculty/staff/alumni/parents — treat as not relevant.
-  const onlyNarrow = names.every((n) => ['graduate students', 'faculty/staff', 'alumni', 'parents'].includes(n));
+  // Metadata exists but names only grad/faculty/staff/alumni/parents/etc. — not relevant.
+  const onlyNarrow = names.every((n) => NARROW_AUDIENCE_NAMES.includes(n));
   return !onlyNarrow;
 }

@@ -440,7 +440,7 @@ function renderCampus() {
         </div>
       </div>
     </div>
-    <div class="filter-strip">
+    <div class="filter-strip campus-pills">
       ${CAMPUS_CATEGORIES.map((c) => `
         <button class="filter-chip${category === c.key ? ' is-selected' : ''}" data-action="pick-campus-category" data-category="${c.key}">${esc(c.label)}</button>
       `).join('')}
