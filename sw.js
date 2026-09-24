@@ -1,4 +1,4 @@
-const CACHE = 'heights-now-v33';
+const CACHE = 'heights-now-v34';
 const ASSETS = [
   './',
   './index.html',

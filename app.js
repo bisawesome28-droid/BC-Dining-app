@@ -29,7 +29,8 @@ const state = {
   shuttleStop: null,
   filterGroup: 'all', // 'all' | 'hall' | 'cafe' | 'rec' | 'library' — resets to 'all' on every fresh load, not persisted
   justToggledId: null, // set right before a row-expand toggle, consumed by the next render
-  menus: null // null while loading; { locations, generatedAt } once menus.json has loaded (see fetch below)
+  menus: null, // null while loading; { locations, generatedAt } once menus.json has loaded (see fetch below)
+  menuMeal: null // selected meal tab on a dining detail screen; null = use the smart time-of-day default
 };
 
 function selectedDay() {
@@ -512,13 +513,36 @@ function renderScheduleBlock(title, section, day) {
   `;
 }
 
+// Title-cases a meal name for display ("GRAB & GO" / "Grab and Go" -> "Grab
+// & Go" / "Grab and Go") without forcing connector words like "and" into caps
+// — BC's feed doesn't use consistent casing across locations, so this is
+// purely cosmetic and never changes what the word actually is.
+const MEAL_CASE_MINOR_WORDS = new Set(['and', 'of', 'the', '&']);
+function titleCaseMeal(s) {
+  return s.toLowerCase().split(' ').map((w, i) => (i > 0 && MEAL_CASE_MINOR_WORDS.has(w)) ? w : w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+}
+
+// Picks which meal tab should be selected by default: the one matching the
+// current time of day if viewing today (so opening a hall at noon lands on
+// Lunch, not Breakfast), otherwise just the first meal of that day. This is
+// only ever a UI default — nothing here asserts an hour a meal actually
+// starts/ends, it just picks a reasonable starting tab.
+function defaultMealName(dayMenus, isToday, nowMin) {
+  if (!isToday) return dayMenus[0].meal;
+  const pref = nowMin < 11 * 60 ? 'breakfast' : nowMin < 15 * 60 ? 'lunch' : nowMin < 20 * 60 ? 'dinner' : 'grab';
+  const found = dayMenus.find((m) => m.meal.toLowerCase().includes(pref));
+  return found ? found.meal : dayMenus[0].meal;
+}
+
 // Today's/selected-day's menu for one dining hall/café, from menus.json —
 // populated by .github/workflows/update-menus.yml from BC Dining's own feed,
 // 3x/day. Only ever shows what that feed actually posted: if this location
 // never matched anything in the feed, the section is omitted entirely rather
 // than showing an empty "no menu" box for a place that structurally never
 // has one; if it matched but has nothing for this specific date, that's
-// shown honestly rather than left blank with no explanation.
+// shown honestly rather than left blank with no explanation. Meal tabs (not
+// just a flat list of every item across every meal) keep a full day's 80+
+// items from all showing at once.
 function renderMenuSection(loc, day, dateStr) {
   if (loc.group !== 'hall' && loc.group !== 'cafe') return '';
   const menus = state.menus;
@@ -537,20 +561,24 @@ function renderMenuSection(loc, day, dateStr) {
     `;
   }
 
+  const isToday = day === state.today;
+  const wantedMeal = state.menuMeal && dayMenus.some((m) => m.meal === state.menuMeal) ? state.menuMeal : defaultMealName(dayMenus, isToday, state.now);
+  const selectedMeal = dayMenus.find((m) => m.meal === wantedMeal) || dayMenus[0];
+
   return `
     <div class="posted-week-title">${esc(title)}</div>
+    <div class="menu-meal-tabs">
+      ${dayMenus.map((m) => `
+        <button class="menu-meal-chip${m.meal === selectedMeal.meal ? ' is-selected' : ''}" data-action="pick-meal" data-meal="${esc(m.meal)}">${esc(titleCaseMeal(m.meal))}</button>
+      `).join('')}
+    </div>
     <div class="menu-meals">
-      ${dayMenus.map((meal) => `
-        <div class="menu-meal">
-          <div class="menu-meal-name">${esc(meal.meal)}</div>
-          ${meal.categories.map((cat) => `
-            <div class="menu-category">
-              <div class="menu-category-name">${esc(cat.category)}</div>
-              <ul class="menu-items">
-                ${cat.items.map((item) => `<li class="menu-item">${esc(item.name)}</li>`).join('')}
-              </ul>
-            </div>
-          `).join('')}
+      ${selectedMeal.categories.map((cat) => `
+        <div class="menu-category">
+          <div class="menu-category-name">${esc(cat.category)}</div>
+          <ul class="menu-items">
+            ${cat.items.map((item) => `<li class="menu-item">${esc(item.name)}</li>`).join('')}
+          </ul>
         </div>
       `).join('')}
     </div>
@@ -799,10 +827,11 @@ function attachHandlers() {
     }
     el.addEventListener('click', (e) => {
       e.stopPropagation();
-      if (action === 'pick-day') setState({ day: Number(el.dataset.day) });
-      else if (action === 'go-tab') setState({ tab: el.dataset.tab, detailId: null });
-      else if (action === 'open-detail') setState({ detailId: el.dataset.id });
-      else if (action === 'close-detail') setState({ detailId: null });
+      if (action === 'pick-day') setState({ day: Number(el.dataset.day), menuMeal: null });
+      else if (action === 'go-tab') setState({ tab: el.dataset.tab, detailId: null, menuMeal: null });
+      else if (action === 'open-detail') setState({ detailId: el.dataset.id, menuMeal: null });
+      else if (action === 'close-detail') setState({ detailId: null, menuMeal: null });
+      else if (action === 'pick-meal') setState({ menuMeal: el.dataset.meal });
       else if (action === 'open-row') {
         const id = el.dataset.id;
         const next = new Set(state.openRows);
