@@ -1,0 +1,35 @@
+name: Update sports schedule
+
+# Refreshes sports.json from BC Athletics' real combined schedule feed.
+# Runs server-side for the same reason as update-menus.yml: the feed
+# doesn't send CORS headers allowing a browser fetch from this app's origin
+# (confirmed by testing directly), but CORS is a browser-only restriction,
+# so a scheduled job here is unaffected and can fetch the real feed.
+on:
+  schedule:
+    - cron: '0 */6 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  update-sports:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Fetch and transform BC Athletics' schedule feed
+        run: node scripts/fetch-sports.mjs
+
+      - name: Commit sports.json if it changed
+        run: |
+          git config user.name "sports-bot"
+          git config user.email "sports-bot@users.noreply.github.com"
+          git add sports.json
+          git diff --cached --quiet || git commit -m "Update sports schedule"
+          git push

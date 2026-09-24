@@ -1,7 +1,8 @@
 import { LOCATIONS, DAY_NAMES, DAY_LETTERS } from './data.js';
 import { fmtTime, fmtRange, fmtDuration, statusFor, rank, spanMinutes, periodsFor, dateKey } from './hours.js';
-import { STOPS, stopInfo, activeWindow, fmtClock, freqLabel, EARLY_LOOP, SPECIAL_SERVICE_NOTICES, SCHEDULE_CHECKED, LIVE_TRACKER_URL } from './shuttle.js';
 import { LIBRARIES, libraryStatusFor, LIBRARIES_CHECKED, LIBRARIES_HUB_URL } from './libraries.js';
+import { fetchCampusEvents } from './campus/bcEvents.js';
+import { etDateKey, addDaysToKey, bucketFor, etTimeLabel, etWeekdayDateLabel } from './campus/dates.js';
 
 const root = document.getElementById('app');
 let searchDebounce = null;
@@ -22,15 +23,18 @@ function dateKeyForDayIndex(i) {
 const state = {
   ...nowParts(),
   day: null, // selected weekday index; null = today
-  tab: 'today', // 'today' | 'week' | 'shuttle'
+  tab: 'today', // 'today' | 'week' | 'campus'
   detailId: null,
   query: '',
   openRows: new Set(),
-  shuttleStop: null,
   filterGroup: 'all', // 'all' | 'hall' | 'cafe' | 'rec' | 'library' — resets to 'all' on every fresh load, not persisted
   justToggledId: null, // set right before a row-expand toggle, consumed by the next render
   menus: null, // null while loading; { locations, generatedAt } once menus.json has loaded (see fetch below)
-  menuMeal: null // selected meal tab on a dining detail screen; null = use the smart time-of-day default
+  menuMeal: null, // selected meal tab on a dining detail screen; null = use the smart time-of-day default
+  campusCategory: 'free-food', // 'free-food' | 'sports' | 'social' | 'career' — lands on Free Food by default
+  campusEvents: null, // null while loading; merged BC Events + BC Athletics array once loaded (lazy — see loadCampusData)
+  campusEventsError: false,
+  campusSportsError: false
 };
 
 function selectedDay() {
@@ -48,7 +52,7 @@ const icon = {
   search: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="rgba(36,33,36,.45)" stroke-width="2.2" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"></circle><path d="M15.5 15.5 21 21"></path></svg>`,
   today: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7.5v4.8l3.4 2"></path></svg>`,
   week: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><rect x="3.5" y="5" width="17" height="15" rx="3"></rect><path d="M3.5 10h17M8.5 3.2v3.4M15.5 3.2v3.4"></path></svg>`,
-  shuttle: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><rect x="3.5" y="5.5" width="17" height="11" rx="3"></rect><path d="M3.5 11h17M7 16.5v2M17 16.5v2"></path><circle cx="7.5" cy="16.2" r=".4" fill="currentColor"></circle><circle cx="16.5" cy="16.2" r=".4" fill="currentColor"></circle></svg>`,
+  campus: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 3 8l9 4.5 9-4.5-9-4.5Z"></path><path d="M6.5 10.3V16c0 1.2 2.5 2.5 5.5 2.5s5.5-1.3 5.5-2.5v-5.7"></path></svg>`,
   external: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 5h5v5M18.5 5.5 10 14"></path><path d="M18 13v5a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h5"></path></svg>`,
   back: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fbf6ec" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 5.5 8 12l6.5 6.5"></path></svg>`
 };
@@ -347,28 +351,86 @@ function renderWeek() {
   `;
 }
 
-// ---------- Shuttle tab ----------
+// ---------- Campus Activities tab ----------
 
-function renderShuttle() {
-  const stopId = state.shuttleStop;
-  const info = stopId ? stopInfo(stopId, state.now, state.today) : null;
-  const stopName = stopId ? STOPS.find((s) => s.id === stopId).name : null;
-  // Overall service status (independent of any stop pick) so the tab is useful
-  // the instant you open it, not just after tapping a stop.
-  const overallWin = activeWindow(state.now, state.today);
+const CAMPUS_CATEGORIES = [
+  { key: 'free-food', label: 'Free Food' },
+  { key: 'sports', label: 'Sports' },
+  { key: 'social', label: 'Social' },
+  { key: 'career', label: 'Career' }
+];
 
-  // Once a stop is picked, lead with the actual answer to "when's the next
-  // bus" instead of a route/variant name — the frequency window already IS
-  // a wait-time estimate (the longest you'd wait for a random arrival), just
-  // reframed as one instead of presented as schedule metadata.
-  const headline = info
-    ? (info.servedNow ? `Next bus in about ${freqLabel(info.win.freq).replace('every ', '')}` : info.win ? 'Not on this route right now' : 'No scheduled service right now')
-    : (overallWin ? overallWin.variant : 'Not running right now');
-  const subline = info
-    ? (info.servedNow ? `${stopName} · ${info.win.variant}` : stopName)
-    : (overallWin ? `Running · ${freqLabel(overallWin.freq)} · pick a stop below` : 'Pick a stop below for the regular schedule');
+const CAMPUS_EMPTY_TEXT = {
+  'free-food': 'No free food events found in the next 7 days.',
+  sports: 'No home games in the next 7 days.',
+  social: 'No social events found in the next 7 days.',
+  career: 'No career events found in the next 7 days.'
+};
+
+let campusLoadStarted = false;
+function loadCampusData() {
+  if (campusLoadStarted) return;
+  campusLoadStarted = true;
+  Promise.allSettled([
+    fetchCampusEvents(new Date()),
+    fetch('./sports.json').then((r) => (r.ok ? r.json() : Promise.reject(new Error('sports.json ' + r.status))))
+  ]).then(([evRes, spRes]) => {
+    const events = evRes.status === 'fulfilled' ? evRes.value : [];
+    const sportsEvents = spRes.status === 'fulfilled' ? spRes.value.events : [];
+    setState({
+      campusEvents: events.concat(sportsEvents),
+      campusEventsError: evRes.status === 'rejected',
+      campusSportsError: spRes.status === 'rejected'
+    });
+  });
+}
+
+function retryCampusData() {
+  campusLoadStarted = false;
+  setState({ campusEvents: null, campusEventsError: false, campusSportsError: false });
+  loadCampusData();
+}
+
+function renderCampusCard(ev) {
+  const isSports = ev.source === 'bc-athletics';
+  const now = Date.now();
+  const isHappeningNow = ev.endTime && now >= new Date(ev.startTime).getTime() && now < new Date(ev.endTime).getTime();
+  const timeLabel = ev.isAllDay ? 'Time TBD' : isHappeningNow ? 'Happening now' : etTimeLabel(ev.startTime);
+  const badges = isSports ? ['Sports'] : ev.categories.map((c) => CAMPUS_CATEGORIES.find((x) => x.key === c)?.label).filter(Boolean);
 
   return `
+    <button class="row-card campus-card" data-action="open-detail" data-id="${esc(ev.id)}">
+      <div class="row-top">
+        <div class="row-name-wrap">
+          <div class="row-name">${esc(ev.title)}</div>
+          <div class="row-place">${esc(ev.location || ev.venue || 'Location TBD')}</div>
+        </div>
+        <span class="pill" style="background:${isHappeningNow ? 'var(--green-wash)' : 'var(--neutral-wash)'};color:${isHappeningNow ? 'var(--green-ink)' : 'rgba(36,33,36,.72)'}">
+          <span class="pill-text">${esc(timeLabel)}</span>
+        </span>
+      </div>
+      <div class="row-sub">${esc(ev.organizer || '')}</div>
+      <div class="campus-badges">
+        ${badges.map((b) => `<span class="campus-badge">${esc(b)}</span>`).join('')}
+      </div>
+    </button>
+  `;
+}
+
+function renderCampusSection(title, events) {
+  if (!events.length) return '';
+  return `
+    <div class="group-head"><span class="group-title">${esc(title)}</span></div>
+    <div class="group-list">${events.map(renderCampusCard).join('')}</div>
+  `;
+}
+
+function renderCampus() {
+  const category = state.campusCategory;
+  const headline = 'Campus Activities';
+  const subline = "What's happening at BC today or this week";
+
+  const banner = `
     <div class="header">
       <div class="header-row">
         <div>
@@ -378,61 +440,80 @@ function renderShuttle() {
         </div>
       </div>
     </div>
-    <div class="stop-strip">
-      ${STOPS.map((s) => `
-        <button class="stop-chip${s.id === stopId ? ' is-selected' : ''}" data-action="pick-stop" data-id="${s.id}">${esc(s.name)}</button>
+    <div class="filter-strip">
+      ${CAMPUS_CATEGORIES.map((c) => `
+        <button class="filter-chip${category === c.key ? ' is-selected' : ''}" data-action="pick-campus-category" data-category="${c.key}">${esc(c.label)}</button>
       `).join('')}
     </div>
+  `;
+
+  if (state.campusEvents === null) {
+    return `${banner}<div class="body-scroll"><div class="empty-state">Loading campus activities…</div></div>`;
+  }
+
+  const sourceFailed = category === 'sports' ? state.campusSportsError : state.campusEventsError;
+  const relevant = state.campusEvents.filter((ev) => ev.categories.includes(category));
+
+  const nowKey = etDateKey(new Date());
+  const endKey = addDaysToKey(nowKey, 7);
+  const buckets = { today: [], tomorrow: [], thisWeek: [] };
+  for (const ev of relevant) {
+    const bucket = bucketFor(ev.startTime, nowKey, endKey);
+    if (buckets[bucket]) buckets[bucket].push(ev);
+  }
+  for (const key of Object.keys(buckets)) buckets[key].sort((a, b) => new Date(a.startTime) - new Date(b.startTime));
+
+  const totalShown = buckets.today.length + buckets.tomorrow.length + buckets.thisWeek.length;
+
+  return `
+    ${banner}
     <div class="body-scroll">
-      <a class="tracker-link" href="${LIVE_TRACKER_URL}" target="_blank" rel="noopener">
-        Open BC live tracker — real bus positions ${icon.external}
-      </a>
-      <div style="height:14px"></div>
-      ${info ? renderStopDetail(stopId, stopName, info) : `<div class="empty-state">Pick a stop above for its next departures.</div>`}
-      <div class="note-card" style="margin-top:9px">
-        <div class="note-key">Early loop</div>
-        <div class="note-val">${esc(EARLY_LOOP.text)}</div>
-      </div>
-      <div class="group-head" style="margin-top:6px"><span class="group-title">Special service — verify dates first</span></div>
-      <div class="notes-list">
-        ${SPECIAL_SERVICE_NOTICES.map((n) => `
-          <div class="note-card">
-            <div class="note-key">${esc(n.k)}</div>
-            <div class="note-val">${esc(n.v)}</div>
-          </div>
-        `).join('')}
-      </div>
-      <div class="footnote">Regular schedule checked ${esc(SCHEDULE_CHECKED)}. This is not a live feed — use the tracker link above for real-time bus positions.</div>
+      ${sourceFailed ? `
+        <div class="empty-state">
+          Couldn't load ${category === 'sports' ? 'the sports schedule' : 'BC Events'} right now.
+          <div style="margin-top:10px"><button class="filter-chip" data-action="retry-campus">Try again</button></div>
+        </div>
+      ` : totalShown === 0 ? `
+        <div class="empty-state">${esc(CAMPUS_EMPTY_TEXT[category])}</div>
+      ` : `
+        ${renderCampusSection('Today', buckets.today)}
+        ${renderCampusSection('Tomorrow', buckets.tomorrow)}
+        ${renderCampusSection('This Week', buckets.thisWeek)}
+      `}
+      <div class="footnote">${category === 'sports' ? 'Source: Boston College Athletics.' : 'Source: Boston College Events (events.bc.edu).'} Only in-person, undergrad-relevant results in the next 7 days are shown.</div>
     </div>
   `;
 }
 
-function renderStopDetail(stopId, stopName, info) {
-  const allWindowsForStop = info.allWindows;
+function renderCampusDetail(id) {
+  const ev = (state.campusEvents || []).find((e) => e.id === id);
+  if (!ev) return `<div class="empty-state">Event not found.</div>`;
+  const isSports = ev.source === 'bc-athletics';
+  const timeLine = ev.isAllDay
+    ? `${etWeekdayDateLabel(ev.startTime)} · Time TBD`
+    : `${etWeekdayDateLabel(ev.startTime)} · ${etTimeLabel(ev.startTime)}${ev.endTime ? '–' + etTimeLabel(ev.endTime) : ''}`;
 
   return `
-    <div class="detail-section-head" style="padding-top:2px">
-      <span class="detail-section-title">${esc(stopName)}</span>
+    <div class="banner">
+      <div class="detail-topbar">
+        <button class="back-btn" data-action="close-detail" aria-label="Back">${icon.back}</button>
+        <span class="detail-group-label">${isSports ? 'Sports' : 'Campus Activities'}</span>
+      </div>
+      <div class="detail-head">
+        <div class="detail-name">${esc(ev.title)}</div>
+        <div class="detail-place">${esc(ev.location || ev.venue || 'Location TBD')}</div>
+        <div class="detail-tags">
+          <span class="detail-status-line">${esc(timeLine)}</span>
+        </div>
+      </div>
     </div>
-    ${!info.win ? `<div class="row-empty-note" style="padding:0 4px 12px">No shuttle window is active right now.</div>` : ''}
-    ${info.win && !info.servedNow ? `<div class="row-empty-note" style="padding:0 4px 12px">Right now the shuttle is running ${esc(info.win.variant)} (${freqLabel(info.win.freq)}), which doesn’t stop here. See this stop’s windows below.</div>` : ''}
-    ${info.servedNow && info.nextStops.length ? `<div class="row-empty-note" style="padding:0 4px 12px">Next stops: ${info.nextStops.map((id) => esc(STOPS.find((s) => s.id === id).name)).join(', ')}</div>` : ''}
-    <div class="period-list">
-      ${allWindowsForStop.map((w) => {
-        const active = info.win === w;
-        return `
-          <div class="period-card" style="background:${active ? 'rgba(52,199,89,.14)' : 'var(--card)'};border-color:${active ? 'rgba(52,199,89,.35)' : 'var(--border)'}">
-            <div class="period-left">
-              <span class="period-dot" style="background:${active ? '#34c759' : 'rgba(86,2,10,.85)'}"></span>
-              <div>
-                <div class="period-name" style="color:#242124">${w.days === 'weekday' ? 'Weekdays' : 'Weekends'} · ${esc(w.variant)}</div>
-                <div class="period-state" style="color:${active ? '#1d8a3e' : 'rgba(36,33,36,.62)'}">${freqLabel(w.freq)}</div>
-              </div>
-            </div>
-            <span class="period-range" style="color:#242124">${fmtClock(w.start)}–${fmtClock(w.end)}</span>
-          </div>
-        `;
-      }).join('')}
+    <div class="body-scroll">
+      ${ev.organizer ? `<div class="detail-section-head"><span class="detail-section-title">Organizer</span></div><div class="note-callout">${esc(ev.organizer)}</div>` : ''}
+      ${ev.description ? `<div class="detail-section-head" style="padding-top:16px"><span class="detail-section-title">Details</span></div><div class="note-callout">${esc(ev.description)}</div>` : ''}
+      <div style="height:16px"></div>
+      ${ev.officialUrl ? `<a class="tracker-link" href="${esc(ev.officialUrl)}" target="_blank" rel="noopener">View Official Event ${icon.external}</a>` : ''}
+      ${ev.registrationUrl ? `<div style="height:9px"></div><a class="tracker-link" href="${esc(ev.registrationUrl)}" target="_blank" rel="noopener">Register ${icon.external}</a>` : ''}
+      <div class="footnote">Source: ${isSports ? 'Boston College Athletics' : 'Boston College Events'}. Details may change — check the official page for anything time-sensitive.</div>
     </div>
   `;
 }
@@ -587,6 +668,8 @@ function renderMenuSection(loc, day, dateStr) {
 }
 
 function renderDetail(id) {
+  if (id.startsWith('bce-') || id.startsWith('bca-')) return renderCampusDetail(id);
+
   const lib = LIBRARIES.find((l) => l.id === id);
   if (lib) return renderLibraryDetail(lib);
 
@@ -704,7 +787,7 @@ function renderTabBar() {
   const tabs = [
     { key: 'today', label: 'Today', icon: icon.today },
     { key: 'week', label: 'Week', icon: icon.week },
-    { key: 'shuttle', label: 'Shuttle', icon: icon.shuttle }
+    { key: 'campus', label: 'Campus', icon: icon.campus }
   ];
   return `
     <div class="tab-bar">
@@ -743,8 +826,8 @@ function render() {
     body = renderDetail(state.detailId);
   } else if (state.tab === 'week') {
     body = renderWeek() + renderTabBar();
-  } else if (state.tab === 'shuttle') {
-    body = renderShuttle() + renderTabBar();
+  } else if (state.tab === 'campus') {
+    body = renderCampus() + renderTabBar();
   } else {
     body = renderToday() + renderTabBar();
   }
@@ -828,7 +911,10 @@ function attachHandlers() {
     el.addEventListener('click', (e) => {
       e.stopPropagation();
       if (action === 'pick-day') setState({ day: Number(el.dataset.day), menuMeal: null });
-      else if (action === 'go-tab') setState({ tab: el.dataset.tab, detailId: null, menuMeal: null });
+      else if (action === 'go-tab') {
+        if (el.dataset.tab === 'campus') loadCampusData(); // lazy — never fetched until the tab is actually opened
+        setState({ tab: el.dataset.tab, detailId: null, menuMeal: null });
+      }
       else if (action === 'open-detail') setState({ detailId: el.dataset.id, menuMeal: null });
       else if (action === 'close-detail') setState({ detailId: null, menuMeal: null });
       else if (action === 'pick-meal') setState({ menuMeal: el.dataset.meal });
@@ -843,7 +929,8 @@ function attachHandlers() {
         // clock tick, a search keystroke) never replays the animation.
         state.justToggledId = id;
         setState({ openRows: next });
-      } else if (action === 'pick-stop') setState({ shuttleStop: el.dataset.id });
+      } else if (action === 'pick-campus-category') setState({ campusCategory: el.dataset.category });
+      else if (action === 'retry-campus') retryCampusData();
       else if (action === 'pick-filter') setState({ filterGroup: el.dataset.group });
     });
   });

@@ -1,4 +1,4 @@
-const CACHE = 'heights-now-v34';
+const CACHE = 'heights-now-v35';
 const ASSETS = [
   './',
   './index.html',
@@ -6,9 +6,12 @@ const ASSETS = [
   './app.js',
   './data.js',
   './hours.js',
-  './shuttle.js',
   './libraries.js',
   './menus.json',
+  './sports.json',
+  './campus/dates.js',
+  './campus/classifiers.js',
+  './campus/bcEvents.js',
   './manifest.webmanifest',
   './icons/icon-192.png',
   './icons/icon-512.png'

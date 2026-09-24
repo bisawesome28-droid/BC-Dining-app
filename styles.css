@@ -618,6 +618,19 @@ button, input {
   padding: 2px 0;
 }
 
+/* ---------- Campus Activities ---------- */
+
+.campus-badges { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+.campus-badge {
+  font: 600 10.5px/1 -apple-system, system-ui, sans-serif;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent);
+  background: var(--accent-wash);
+  border-radius: 999px;
+  padding: 4px 9px;
+}
+
 @media (prefers-color-scheme: light) {
   /* App is dark-only by design (matches the locked-in "sleek" direction). */
 }
