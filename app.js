@@ -397,11 +397,20 @@ function retryCampusData() {
   loadCampusData();
 }
 
-function renderCampusCard(ev) {
+function renderCampusCard(ev, showDate) {
   const isSports = ev.source === 'bc-athletics';
   const now = Date.now();
   const isHappeningNow = ev.endTime && now >= new Date(ev.startTime).getTime() && now < new Date(ev.endTime).getTime();
-  const timeLabel = ev.isAllDay ? 'Time TBD' : isHappeningNow ? 'Happening now' : etTimeLabel(ev.startTime);
+  // "This Week" lumps together several different days, so a bare time (e.g.
+  // "7 PM") is ambiguous there — Today/Tomorrow don't need the date since
+  // the section header already says which day it is.
+  const timeLabel = ev.isAllDay
+    ? 'Time TBD'
+    : isHappeningNow
+      ? 'Happening now'
+      : showDate
+        ? `${etWeekdayDateLabel(ev.startTime)} · ${etTimeLabel(ev.startTime)}`
+        : etTimeLabel(ev.startTime);
   const badges = isSports ? ['Sports'] : ev.categories.map((c) => CAMPUS_CATEGORIES.find((x) => x.key === c)?.label).filter(Boolean);
 
   return `
@@ -416,6 +425,7 @@ function renderCampusCard(ev) {
         </span>
       </div>
       <div class="row-sub">${esc(ev.organizer || '')}</div>
+      ${ev.foodType ? `<div class="row-sub" style="color:var(--accent);font-weight:600;margin-top:2px">${esc(ev.foodType)}</div>` : ''}
       <div class="campus-badges">
         ${badges.map((b) => `<span class="campus-badge">${esc(b)}</span>`).join('')}
       </div>
@@ -425,9 +435,10 @@ function renderCampusCard(ev) {
 
 function renderCampusSection(title, events) {
   if (!events.length) return '';
+  const showDate = title === 'This Week';
   return `
     <div class="group-head"><span class="group-title">${esc(title)}</span></div>
-    <div class="group-list">${events.map(renderCampusCard).join('')}</div>
+    <div class="group-list">${events.map((ev) => renderCampusCard(ev, showDate)).join('')}</div>
   `;
 }
 
@@ -517,6 +528,7 @@ function renderCampusDetail(id) {
     </div>
     <div class="body-scroll">
       ${ev.organizer ? `<div class="detail-section-head"><span class="detail-section-title">Organizer</span></div><div class="note-callout">${esc(ev.organizer)}</div>` : ''}
+      ${ev.foodType ? `<div class="detail-section-head" style="padding-top:16px"><span class="detail-section-title">Food</span></div><div class="note-callout">${esc(ev.foodType)}</div>` : ''}
       ${ev.description ? `<div class="detail-section-head" style="padding-top:16px"><span class="detail-section-title">Details</span></div><div class="note-callout">${esc(ev.description)}</div>` : ''}
       <div style="height:16px"></div>
       ${ev.officialUrl ? `<a class="tracker-link" href="${esc(ev.officialUrl)}" target="_blank" rel="noopener">View Official Event ${icon.external}</a>` : ''}
