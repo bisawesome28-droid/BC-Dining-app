@@ -373,12 +373,18 @@ function loadCampusData() {
   campusLoadStarted = true;
   Promise.allSettled([
     fetchCampusEvents(new Date()),
-    fetch('./sports.json').then((r) => (r.ok ? r.json() : Promise.reject(new Error('sports.json ' + r.status))))
-  ]).then(([evRes, spRes]) => {
+    fetch('./sports.json').then((r) => (r.ok ? r.json() : Promise.reject(new Error('sports.json ' + r.status)))),
+    fetch('./campus/manual-events.json').then((r) => (r.ok ? r.json() : Promise.reject(new Error('manual-events.json ' + r.status))))
+  ]).then(([evRes, spRes, manRes]) => {
     const events = evRes.status === 'fulfilled' ? evRes.value : [];
     const sportsEvents = spRes.status === 'fulfilled' ? spRes.value.events : [];
+    // Manually-added events (things like club flyers that never made it to
+    // BC's official calendar) — a small, hand-curated list, not a scraped
+    // source, so a fetch failure here is silent rather than surfaced as an
+    // error banner like the two real data sources are.
+    const manualEvents = manRes.status === 'fulfilled' ? manRes.value.events : [];
     setState({
-      campusEvents: events.concat(sportsEvents),
+      campusEvents: events.concat(sportsEvents, manualEvents),
       campusEventsError: evRes.status === 'rejected',
       campusSportsError: spRes.status === 'rejected'
     });
@@ -489,6 +495,8 @@ function renderCampusDetail(id) {
   const ev = (state.campusEvents || []).find((e) => e.id === id);
   if (!ev) return `<div class="empty-state">Event not found.</div>`;
   const isSports = ev.source === 'bc-athletics';
+  const isManual = ev.source === 'manual';
+  const sourceLabel = isSports ? 'Boston College Athletics' : isManual ? 'Added directly (not from BC’s official calendar)' : 'Boston College Events';
   const timeLine = ev.isAllDay
     ? `${etWeekdayDateLabel(ev.startTime)} · Time TBD`
     : `${etWeekdayDateLabel(ev.startTime)} · ${etTimeLabel(ev.startTime)}${ev.endTime ? '–' + etTimeLabel(ev.endTime) : ''}`;
@@ -513,7 +521,7 @@ function renderCampusDetail(id) {
       <div style="height:16px"></div>
       ${ev.officialUrl ? `<a class="tracker-link" href="${esc(ev.officialUrl)}" target="_blank" rel="noopener">View Official Event ${icon.external}</a>` : ''}
       ${ev.registrationUrl ? `<div style="height:9px"></div><a class="tracker-link" href="${esc(ev.registrationUrl)}" target="_blank" rel="noopener">Register ${icon.external}</a>` : ''}
-      <div class="footnote">Source: ${isSports ? 'Boston College Athletics' : 'Boston College Events'}. Details may change — check the official page for anything time-sensitive.</div>
+      <div class="footnote">Source: ${sourceLabel}. ${isManual ? 'Details may change.' : 'Details may change — check the official page for anything time-sensitive.'}</div>
     </div>
   `;
 }

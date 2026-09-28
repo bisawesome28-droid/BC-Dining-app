@@ -1,0 +1,14 @@
+{
+  "events": [
+    {
+      "id": "manual-dell-ama-2026-09-30",
+      "title": "Dell x AMA Networking Event",
+      "description": "Brief talk, panel, and open networking event with Dell Technologies! Come hear from professionals in finance, sales, marketing, and revenue operations about their experiences at Dell. Chick-fil-A will be served.",
+      "startTime": "2026-09-30T19:00:00-04:00",
+      "location": "Carney 303",
+      "organizer": "BC American Marketing Association (AMA)",
+      "categories": ["free-food", "career"],
+      "source": "manual"
+    }
+  ]
+}
